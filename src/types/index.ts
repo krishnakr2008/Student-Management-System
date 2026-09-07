@@ -194,6 +194,10 @@ export interface Exam {
 
 export interface TimetableSlot {
   id: string;
+  course_id: string;
+  course_name?: string;
+  semester: number;
+  section: string;
   day: 'Monday' | 'Tuesday' | 'Wednesday' | 'Thursday' | 'Friday' | 'Saturday';
   start_time: string;
   end_time: string;
@@ -203,7 +207,12 @@ export interface TimetableSlot {
   teacher_id?: string;
   teacher_name?: string;
   room: string;
-  type: 'Lecture' | 'Lab' | 'Tutorial';
+  type: 'Lecture' | 'Practical' | 'Tutorial' | 'Lab' | 'Seminar';
+  status?: 'Draft' | 'Published' | 'Cancelled';
+  created_by?: string;
+  updated_by?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface Notice {

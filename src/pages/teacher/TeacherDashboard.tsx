@@ -4,7 +4,8 @@ import { dbService } from '../../services/dbService';
 import { StatCard } from '../../components/common/StatCard';
 import { BookOpen, Users, CalendarCheck, FileText, Plus, CheckCircle } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Subject, Student, Assignment } from '../../types';
+import { Subject, Student, Assignment, TimetableSlot } from '../../types';
+import { Clock, MapPin } from 'lucide-react';
 
 export const TeacherDashboard: React.FC = () => {
   const { user, teacher } = useAuth();
@@ -13,20 +14,31 @@ export const TeacherDashboard: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [students, setStudents] = useState<Student[]>([]);
   const [assignments, setAssignments] = useState<Assignment[]>([]);
+  const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
 
   useEffect(() => {
     const loadTeacherData = async () => {
-      const [subjData, stdData, asgnData] = await Promise.all([
+      const [subjData, stdData, asgnData, ttData] = await Promise.all([
         dbService.getSubjects(),
         dbService.getStudents(),
         dbService.getAssignments(),
+        dbService.getTimetable(),
       ]);
       setSubjects(subjData);
       setStudents(stdData);
       setAssignments(asgnData);
+
+      // Filter slots for logged in teacher
+      const teacherSlots = ttData.filter(t => {
+        if (teacher && t.teacher_id === teacher.id) return true;
+        if (user && t.teacher_name && t.teacher_name.toLowerCase() === user.full_name.toLowerCase()) return true;
+        return false;
+      });
+
+      setTimetable(teacherSlots.length > 0 ? teacherSlots : ttData);
     };
     loadTeacherData();
-  }, []);
+  }, [teacher, user]);
 
   return (
     <div className="space-y-6">
@@ -75,6 +87,50 @@ export const TeacherDashboard: React.FC = () => {
         <StatCard title="Total Students" value={students.length} icon={Users} color="emerald" subtitle="Enrolled in Classes" />
         <StatCard title="Average Attendance" value="91.4%" icon={CalendarCheck} color="purple" subtitle="Class Overall" />
         <StatCard title="Active Assignments" value={assignments.length} icon={FileText} color="amber" subtitle="Pending Evaluations" />
+      </div>
+
+      {/* Today's Teaching Schedule Widget */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Today's Teaching Schedule</h3>
+            <p className="text-xs text-slate-500">Upcoming lectures, practicals and classroom allocations</p>
+          </div>
+          <button
+            onClick={() => navigate('/teacher/timetable')}
+            className="text-xs font-semibold text-emerald-600 dark:text-emerald-400 hover:underline"
+          >
+            Full Timetable →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+          {(timetable.filter(t => t.day === 'Monday' || t.day === new Date().toLocaleDateString('en-US', { weekday: 'long' })).slice(0, 3)).map(slot => (
+            <div key={slot.id} className="p-4 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 space-y-2">
+              <div className="flex items-center justify-between text-xs">
+                <span className="font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                  <Clock className="w-3.5 h-3.5" /> {slot.start_time} - {slot.end_time}
+                </span>
+                <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300">
+                  {slot.type}
+                </span>
+              </div>
+              <div>
+                <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">{slot.subject_name}</h4>
+                <p className="text-[11px] text-slate-500 font-semibold">{slot.course_name} Sem {slot.semester} ({slot.section})</p>
+              </div>
+              <div className="pt-2 border-t border-slate-200/50 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+                <span className="font-bold text-slate-700 dark:text-slate-300">Room {slot.room}</span>
+                <button
+                  onClick={() => navigate('/teacher/attendance')}
+                  className="font-bold text-emerald-600 hover:underline"
+                >
+                  Mark Attendance
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* Assigned Subjects Overview */}

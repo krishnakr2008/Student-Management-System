@@ -32,6 +32,7 @@ import { TeacherAttendance } from './pages/teacher/TeacherAttendance';
 import { TeacherMarks } from './pages/teacher/TeacherMarks';
 import { TeacherAssignments } from './pages/teacher/TeacherAssignments';
 import { TeacherStudents } from './pages/teacher/TeacherStudents';
+import { TeacherTimetable } from './pages/teacher/TeacherTimetable';
 
 // Admin Pages
 import { AdminDashboard } from './pages/admin/AdminDashboard';
@@ -47,6 +48,7 @@ import { AdminCertificates } from './pages/admin/AdminCertificates';
 import { AdminNotices } from './pages/admin/AdminNotices';
 import { AdminEvents } from './pages/admin/AdminEvents';
 import { AdminReports } from './pages/admin/AdminReports';
+import { AdminTimetable } from './pages/admin/AdminTimetable';
 
 // Shared Pages
 import { SettingsPage } from './pages/common/SettingsPage';
@@ -135,7 +137,7 @@ export const App: React.FC = () => {
                 <Route path="marks" element={<TeacherMarks />} />
                 <Route path="assignments" element={<TeacherAssignments />} />
                 <Route path="exams" element={<StudentExams />} />
-                <Route path="timetable" element={<StudentTimetable />} />
+                <Route path="timetable" element={<TeacherTimetable />} />
                 <Route path="notices" element={<StudentNotices />} />
                 <Route path="notifications" element={<StudentNotifications />} />
                 <Route path="settings" element={<SettingsPage />} />
@@ -160,7 +162,7 @@ export const App: React.FC = () => {
                 <Route path="student-allocations" element={<AdminStudentAllocation />} />
                 <Route path="attendance" element={<AdminAttendance />} />
                 <Route path="marks" element={<AdminMarks />} />
-                <Route path="timetable" element={<StudentTimetable />} />
+                <Route path="timetable" element={<AdminTimetable />} />
                 <Route path="assignments" element={<TeacherAssignments />} />
                 <Route path="exams" element={<StudentExams />} />
                 <Route path="notices" element={<AdminNotices />} />

@@ -813,13 +813,211 @@ export const dbService = {
   },
 
   // TIMETABLE
-  async getTimetable(): Promise<TimetableSlot[]> {
+  async getTimetable(filters?: {
+    course_id?: string;
+    semester?: number;
+    section?: string;
+    teacher_id?: string;
+    subject_id?: string;
+    day?: string;
+    room?: string;
+    status?: string;
+  }): Promise<TimetableSlot[]> {
+    let all: TimetableSlot[] = [];
+
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('timetable').select('*');
+      let query = supabase.from('timetable').select('*');
+      if (filters?.course_id) query = query.eq('course_id', filters.course_id);
+      if (filters?.semester) query = query.eq('semester', filters.semester);
+      if (filters?.section) query = query.eq('section', filters.section);
+      if (filters?.teacher_id) query = query.eq('teacher_id', filters.teacher_id);
+      if (filters?.subject_id) query = query.eq('subject_id', filters.subject_id);
+      if (filters?.day) query = query.eq('day', filters.day);
+      if (filters?.room) query = query.eq('room', filters.room);
+      if (filters?.status) query = query.eq('status', filters.status);
+
+      const { data, error } = await query;
       if (error) throw new Error(error.message);
-      return data as TimetableSlot[];
+      all = data as TimetableSlot[];
+    } else {
+      all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
     }
-    return getStorageData('timetable', INITIAL_TIMETABLE);
+
+    return all.filter(slot => {
+      if (filters?.course_id && slot.course_id !== filters.course_id) return false;
+      if (filters?.semester && slot.semester !== filters.semester) return false;
+      if (filters?.section && slot.section.toLowerCase() !== filters.section.toLowerCase()) return false;
+      if (filters?.teacher_id && slot.teacher_id !== filters.teacher_id) return false;
+      if (filters?.subject_id && slot.subject_id !== filters.subject_id) return false;
+      if (filters?.day && slot.day !== filters.day) return false;
+      if (filters?.room && slot.room.toLowerCase() !== filters.room.toLowerCase()) return false;
+      if (filters?.status && slot.status !== filters.status) return false;
+      return true;
+    });
+  },
+
+  async createTimetableSlot(slotData: Omit<TimetableSlot, 'id'>, userId?: string): Promise<TimetableSlot> {
+    const existingSlots = await this.getTimetable();
+
+    // Helper: Convert "09:30" or "09:30:00" to total minutes
+    const timeToMin = (t: string) => {
+      if (!t) return 0;
+      const parts = t.split(':').map(Number);
+      return parts[0] * 60 + (parts[1] || 0);
+    };
+
+    const newStart = timeToMin(slotData.start_time);
+    const newEnd = timeToMin(slotData.end_time);
+
+    if (newStart >= newEnd) {
+      throw new Error('Start time must be before end time.');
+    }
+
+    // CONFLICT DETECTION
+    for (const slot of existingSlots) {
+      if (slot.day !== slotData.day) continue;
+      if (slot.status === 'Cancelled') continue;
+
+      const existStart = timeToMin(slot.start_time);
+      const existEnd = timeToMin(slot.end_time);
+
+      const isOverlap = newStart < existEnd && newEnd > existStart;
+      if (!isOverlap) continue;
+
+      // 1. Teacher Collision
+      if (slotData.teacher_id && slot.teacher_id === slotData.teacher_id) {
+        throw new Error(
+          `Timetable Conflict: Instructor "${slot.teacher_name || 'Teacher'}" is already scheduled to teach "${slot.subject_name}" in ${slot.room} on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
+        );
+      }
+
+      // 2. Room Collision
+      if (slotData.room && slot.room.toLowerCase().trim() === slotData.room.toLowerCase().trim()) {
+        throw new Error(
+          `Timetable Conflict: Room/Venue "${slot.room}" is already reserved for "${slot.subject_name}" (${slot.course_name || 'Class'}) on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
+        );
+      }
+
+      // 3. Section Collision
+      if (
+        slotData.course_id &&
+        slot.course_id === slotData.course_id &&
+        slot.semester === slotData.semester &&
+        slot.section.toLowerCase().trim() === slotData.section?.toLowerCase().trim()
+      ) {
+        throw new Error(
+          `Timetable Conflict: ${slot.course_name || 'Course'} Semester ${slot.semester} Section ${slot.section} is already scheduled for "${slot.subject_name}" on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
+        );
+      }
+    }
+
+    const newSlot: TimetableSlot = {
+      ...slotData,
+      id: `tt-${Date.now()}`,
+      status: slotData.status || 'Published',
+      created_by: userId,
+      created_at: new Date().toISOString(),
+    };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('timetable').insert(newSlot);
+      if (error) throw new Error(error.message);
+    }
+
+    const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
+    all.push(newSlot);
+    setStorageData('timetable', all);
+
+    return newSlot;
+  },
+
+  async updateTimetableSlot(id: string, updates: Partial<TimetableSlot>, userId?: string): Promise<TimetableSlot> {
+    const existingSlots = await this.getTimetable();
+    const currentIdx = existingSlots.findIndex(s => s.id === id);
+    if (currentIdx === -1) throw new Error('Timetable record not found.');
+
+    const targetSlot = { ...existingSlots[currentIdx], ...updates };
+
+    const timeToMin = (t: string) => {
+      if (!t) return 0;
+      const parts = t.split(':').map(Number);
+      return parts[0] * 60 + (parts[1] || 0);
+    };
+
+    const newStart = timeToMin(targetSlot.start_time);
+    const newEnd = timeToMin(targetSlot.end_time);
+
+    if (newStart >= newEnd) {
+      throw new Error('Start time must be before end time.');
+    }
+
+    // CONFLICT DETECTION (excluding current record)
+    for (const slot of existingSlots) {
+      if (slot.id === id) continue;
+      if (slot.day !== targetSlot.day) continue;
+      if (slot.status === 'Cancelled') continue;
+
+      const existStart = timeToMin(slot.start_time);
+      const existEnd = timeToMin(slot.end_time);
+
+      const isOverlap = newStart < existEnd && newEnd > existStart;
+      if (!isOverlap) continue;
+
+      if (targetSlot.teacher_id && slot.teacher_id === targetSlot.teacher_id) {
+        throw new Error(
+          `Timetable Conflict: Instructor "${slot.teacher_name || 'Teacher'}" is already scheduled to teach "${slot.subject_name}" in ${slot.room} on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
+        );
+      }
+
+      if (targetSlot.room && slot.room.toLowerCase().trim() === targetSlot.room.toLowerCase().trim()) {
+        throw new Error(
+          `Timetable Conflict: Room/Venue "${slot.room}" is already reserved for "${slot.subject_name}" (${slot.course_name || 'Class'}) on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
+        );
+      }
+
+      if (
+        targetSlot.course_id &&
+        slot.course_id === targetSlot.course_id &&
+        slot.semester === targetSlot.semester &&
+        slot.section.toLowerCase().trim() === targetSlot.section?.toLowerCase().trim()
+      ) {
+        throw new Error(
+          `Timetable Conflict: ${slot.course_name || 'Course'} Semester ${slot.semester} Section ${slot.section} is already attending "${slot.subject_name}" on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
+        );
+      }
+    }
+
+    const updatedSlot: TimetableSlot = {
+      ...targetSlot,
+      updated_by: userId,
+      updated_at: new Date().toISOString(),
+    };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('timetable').update(updatedSlot).eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
+    const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
+    const idx = all.findIndex(s => s.id === id);
+    if (idx !== -1) {
+      all[idx] = updatedSlot;
+      setStorageData('timetable', all);
+    }
+
+    return updatedSlot;
+  },
+
+  async deleteTimetableSlot(id: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('timetable').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
+    const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
+    const filtered = all.filter(s => s.id !== id);
+    setStorageData('timetable', filtered);
+    return true;
   },
 
   // NOTICES

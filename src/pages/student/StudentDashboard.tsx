@@ -35,6 +35,7 @@ import {
   Exam,
   Notice,
   Certificate,
+  TimetableSlot,
 } from '../../types';
 import { calculateCareerReadinessScore } from '../../services/careerEngine';
 
@@ -49,19 +50,21 @@ export const StudentDashboard: React.FC = () => {
   const [exams, setExams] = useState<Exam[]>([]);
   const [notices, setNotices] = useState<Notice[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [timetable, setTimetable] = useState<TimetableSlot[]>([]);
 
   useEffect(() => {
     const loadDashboardData = async () => {
       if (!student) return;
       setLoading(true);
 
-      const [attData, marksData, asgnData, examData, noticeData, certData] = await Promise.all([
+      const [attData, marksData, asgnData, examData, noticeData, certData, ttData] = await Promise.all([
         dbService.getStudentAttendanceSummary(student.id),
         dbService.getStudentMarks(student.id),
         dbService.getAssignments(),
         dbService.getExams(),
         dbService.getNotices(),
         dbService.getCertificates(student.id),
+        dbService.getTimetable(),
       ]);
 
       setAttendanceSummary(attData);
@@ -70,6 +73,7 @@ export const StudentDashboard: React.FC = () => {
       setExams(examData);
       setNotices(noticeData);
       setCertificates(certData);
+      setTimetable(ttData);
 
       setLoading(false);
     };
@@ -255,6 +259,45 @@ export const StudentDashboard: React.FC = () => {
                   <Line type="monotone" dataKey="sgpa" stroke="#8b5cf6" strokeWidth={3} dot={{ r: 5 }} />
                 </LineChart>
               </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Today's Class Schedule Widget */}
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Today's Class Schedule</h3>
+                <p className="text-xs text-slate-500">Live timeline & room allocations for your batch</p>
+              </div>
+              <button
+                onClick={() => navigate('/student/timetable')}
+                className="text-xs font-semibold text-brand-600 dark:text-brand-400 hover:underline"
+              >
+                Full Timetable →
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              {(timetable.filter(t => t.day === 'Monday' || t.day === new Date().toLocaleDateString('en-US', { weekday: 'long' })).slice(0, 4)).map(slot => (
+                <div key={slot.id} className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/60 dark:border-slate-800 space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-brand-600 dark:text-brand-400 flex items-center gap-1">
+                      <Clock className="w-3.5 h-3.5" /> {slot.start_time} - {slot.end_time}
+                    </span>
+                    <span className="px-2 py-0.5 rounded text-[10px] font-extrabold uppercase bg-brand-100 dark:bg-brand-950 text-brand-700 dark:text-brand-300">
+                      {slot.type}
+                    </span>
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-800 dark:text-slate-200">{slot.subject_name}</h4>
+                    <p className="text-[11px] text-slate-400 font-mono">{slot.subject_code}</p>
+                  </div>
+                  <div className="pt-2 border-t border-slate-200/50 dark:border-slate-800 flex items-center justify-between text-[11px] text-slate-500">
+                    <span>Faculty: {slot.teacher_name || 'Assigned'}</span>
+                    <span className="font-bold text-rose-500">Room {slot.room}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           </div>
 
