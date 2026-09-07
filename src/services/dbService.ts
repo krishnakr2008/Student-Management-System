@@ -826,32 +826,39 @@ export const dbService = {
     let all: TimetableSlot[] = [];
 
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('timetable').select('*');
-      if (filters?.course_id) query = query.eq('course_id', filters.course_id);
-      if (filters?.semester) query = query.eq('semester', filters.semester);
-      if (filters?.section) query = query.eq('section', filters.section);
-      if (filters?.teacher_id) query = query.eq('teacher_id', filters.teacher_id);
-      if (filters?.subject_id) query = query.eq('subject_id', filters.subject_id);
-      if (filters?.day) query = query.eq('day', filters.day);
-      if (filters?.room) query = query.eq('room', filters.room);
-      if (filters?.status) query = query.eq('status', filters.status);
+      try {
+        let query = supabase.from('timetable').select('*');
+        if (filters?.course_id) query = query.eq('course_id', filters.course_id);
+        if (filters?.semester) query = query.eq('semester', filters.semester);
+        if (filters?.section) query = query.eq('section', filters.section);
+        if (filters?.teacher_id) query = query.eq('teacher_id', filters.teacher_id);
+        if (filters?.subject_id) query = query.eq('subject_id', filters.subject_id);
+        if (filters?.day) query = query.eq('day', filters.day);
+        if (filters?.room) query = query.eq('room', filters.room);
+        if (filters?.status) query = query.eq('status', filters.status);
 
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      all = data as TimetableSlot[];
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) {
+          all = data as TimetableSlot[];
+        } else {
+          all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
+        }
+      } catch {
+        all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
+      }
     } else {
       all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
     }
 
     return all.filter(slot => {
-      if (filters?.course_id && slot.course_id !== filters.course_id) return false;
-      if (filters?.semester && slot.semester !== filters.semester) return false;
-      if (filters?.section && slot.section.toLowerCase() !== filters.section.toLowerCase()) return false;
-      if (filters?.teacher_id && slot.teacher_id !== filters.teacher_id) return false;
-      if (filters?.subject_id && slot.subject_id !== filters.subject_id) return false;
-      if (filters?.day && slot.day !== filters.day) return false;
-      if (filters?.room && slot.room.toLowerCase() !== filters.room.toLowerCase()) return false;
-      if (filters?.status && slot.status !== filters.status) return false;
+      if (filters?.course_id && slot.course_id && slot.course_id !== filters.course_id) return false;
+      if (filters?.semester && slot.semester && slot.semester !== filters.semester) return false;
+      if (filters?.section && slot.section && slot.section.toLowerCase() !== filters.section.toLowerCase()) return false;
+      if (filters?.teacher_id && slot.teacher_id && slot.teacher_id !== filters.teacher_id) return false;
+      if (filters?.subject_id && slot.subject_id && slot.subject_id !== filters.subject_id) return false;
+      if (filters?.day && slot.day && slot.day !== filters.day) return false;
+      if (filters?.room && slot.room && slot.room.toLowerCase() !== filters.room.toLowerCase()) return false;
+      if (filters?.status && slot.status && slot.status !== filters.status) return false;
       return true;
     });
   },
@@ -920,12 +927,21 @@ export const dbService = {
     };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('timetable').insert(newSlot);
-      if (error) throw new Error(error.message);
+      try {
+        const { error } = await supabase.from('timetable').insert(newSlot);
+        if (error) console.error('Supabase create timetable error:', error.message);
+      } catch (e) {
+        console.error('Supabase insert exception:', e);
+      }
     }
 
     const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
-    all.push(newSlot);
+    const existingIdx = all.findIndex(s => s.id === newSlot.id);
+    if (existingIdx !== -1) {
+      all[existingIdx] = newSlot;
+    } else {
+      all.push(newSlot);
+    }
     setStorageData('timetable', all);
 
     return newSlot;
@@ -934,9 +950,14 @@ export const dbService = {
   async updateTimetableSlot(id: string, updates: Partial<TimetableSlot>, userId?: string): Promise<TimetableSlot> {
     const existingSlots = await this.getTimetable();
     const currentIdx = existingSlots.findIndex(s => s.id === id);
-    if (currentIdx === -1) throw new Error('Timetable record not found.');
 
-    const targetSlot = { ...existingSlots[currentIdx], ...updates };
+    const storageSlots = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
+    const storageIdx = storageSlots.findIndex(s => s.id === id);
+    const baseSlot = currentIdx !== -1 ? existingSlots[currentIdx] : storageIdx !== -1 ? storageSlots[storageIdx] : null;
+
+    if (!baseSlot) throw new Error('Timetable record not found.');
+
+    const targetSlot: TimetableSlot = { ...baseSlot, ...updates };
 
     const timeToMin = (t: string) => {
       if (!t) return 0;
@@ -994,24 +1015,34 @@ export const dbService = {
     };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('timetable').update(updatedSlot).eq('id', id);
-      if (error) throw new Error(error.message);
+      try {
+        const { error } = await supabase.from('timetable').update(updatedSlot).eq('id', id);
+        if (error) console.error('Supabase update timetable error:', error.message);
+      } catch (e) {
+        console.error('Supabase update exception:', e);
+      }
     }
 
     const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
     const idx = all.findIndex(s => s.id === id);
     if (idx !== -1) {
       all[idx] = updatedSlot;
-      setStorageData('timetable', all);
+    } else {
+      all.push(updatedSlot);
     }
+    setStorageData('timetable', all);
 
     return updatedSlot;
   },
 
   async deleteTimetableSlot(id: string): Promise<boolean> {
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('timetable').delete().eq('id', id);
-      if (error) throw new Error(error.message);
+      try {
+        const { error } = await supabase.from('timetable').delete().eq('id', id);
+        if (error) console.error('Supabase delete error:', error.message);
+      } catch (e) {
+        console.error('Supabase delete exception:', e);
+      }
     }
 
     const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);

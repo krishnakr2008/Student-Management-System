@@ -32,23 +32,22 @@ export const StudentTimetable: React.FC = () => {
       try {
         const data = await dbService.getTimetable();
 
-        // Strictly filter slots for student's course, semester, and section
+        // Filter slots for student's semester and section
         let studentSlots = data;
         if (student) {
           studentSlots = data.filter(t => {
-            if (student.course_id && t.course_id !== student.course_id) return false;
-            if (student.semester && t.semester !== student.semester) return false;
-            if (student.section && t.section.toLowerCase() !== student.section.toLowerCase()) return false;
+            if (student.semester && t.semester && t.semester !== student.semester) return false;
+            if (student.section && t.section && t.section.toLowerCase() !== student.section.toLowerCase()) return false;
+            if (student.course_id && t.course_id && t.course_id !== student.course_id && student.course_name && t.course_name && !t.course_name.toLowerCase().includes(student.course_name.toLowerCase())) return false;
             return true;
           });
 
-          // Fallback if student specific slots are empty (e.g. initial demo setup)
           if (studentSlots.length === 0) {
-            studentSlots = data.filter(t => t.semester === (student.semester || 5));
+            studentSlots = data;
           }
         }
 
-        setTimetable(studentSlots.length > 0 ? studentSlots : data);
+        setTimetable(studentSlots);
       } catch (err) {
         console.error('Error loading student timetable:', err);
       } finally {

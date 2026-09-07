@@ -179,14 +179,25 @@ CREATE TABLE IF NOT EXISTS public.exams (
 -- 13. TIMETABLE
 CREATE TABLE IF NOT EXISTS public.timetable (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    course_id UUID REFERENCES public.courses(id) ON DELETE CASCADE,
+    course_name TEXT,
+    semester INT NOT NULL DEFAULT 5,
+    section TEXT NOT NULL DEFAULT 'A',
     day TEXT NOT NULL CHECK (day IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')),
     start_time TIME NOT NULL,
     end_time TIME NOT NULL,
     subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    subject_name TEXT,
+    subject_code TEXT,
     teacher_id UUID REFERENCES public.teachers(id),
+    teacher_name TEXT,
     room TEXT NOT NULL,
-    type TEXT NOT NULL DEFAULT 'Lecture' CHECK (type IN ('Lecture', 'Lab', 'Tutorial')),
-    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+    type TEXT NOT NULL DEFAULT 'Lecture' CHECK (type IN ('Lecture', 'Lab', 'Practical', 'Tutorial', 'Seminar')),
+    status TEXT NOT NULL DEFAULT 'Published' CHECK (status IN ('Published', 'Draft', 'Cancelled')),
+    created_by UUID REFERENCES public.profiles(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_by UUID REFERENCES public.profiles(id),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
 -- 14. NOTICES

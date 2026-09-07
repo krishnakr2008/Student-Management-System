@@ -77,7 +77,7 @@ export const TeacherTimetable: React.FC = () => {
         return false;
       });
 
-      setTimetable(teacherSlots.length > 0 ? teacherSlots : ttData); // Fallback to all if teacher match empty for demo
+      setTimetable(ttData);
       setCourses(crsData);
       setSubjects(subjData);
     } catch (err: any) {
@@ -131,6 +131,26 @@ export const TeacherTimetable: React.FC = () => {
   };
 
   const filteredTimetable = timetable.filter(slot => {
+    if (teacher || user) {
+      const isAssigned =
+        (teacher && slot.teacher_id === teacher.id) ||
+        (user &&
+          slot.teacher_name &&
+          (slot.teacher_name.toLowerCase().includes(user.full_name.toLowerCase()) ||
+            user.full_name.toLowerCase().includes(slot.teacher_name.toLowerCase())));
+
+      const hasAnyAssigned = timetable.some(
+        t =>
+          (teacher && t.teacher_id === teacher.id) ||
+          (user &&
+            t.teacher_name &&
+            (t.teacher_name.toLowerCase().includes(user.full_name.toLowerCase()) ||
+              user.full_name.toLowerCase().includes(t.teacher_name.toLowerCase())))
+      );
+
+      if (hasAnyAssigned && !isAssigned) return false;
+    }
+
     if (filterCourseId !== 'all' && slot.course_id !== filterCourseId) return false;
     if (filterSemester !== 'all' && slot.semester !== Number(filterSemester)) return false;
     if (filterSection !== 'all' && slot.section.toLowerCase() !== filterSection.toLowerCase()) return false;
