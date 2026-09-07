@@ -27,7 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadInitialUser = async () => {
     try {
       setLoading(true);
-      const savedEmail = localStorage.getItem('auth_email') || 'student@university.edu';
+      const savedEmail = localStorage.getItem('auth_email') || 'student1@college.com';
       const savedRole = (localStorage.getItem('auth_role') as UserRole) || 'student';
 
       await loadUserByEmailAndRole(savedEmail, savedRole);
@@ -43,7 +43,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     let profile = profiles.find(p => p.email.toLowerCase() === email.toLowerCase());
 
     if (!profile) {
-      // Pick fallback profile for target role
       profile = profiles.find(p => p.role === targetRole) || profiles[0];
     }
 
@@ -78,8 +77,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const profiles = await dbService.getProfiles();
       const found = profiles.find(p => p.email.toLowerCase() === email.toLowerCase());
-      const selectedRole = reqRole || (found ? found.role : 'student');
-      
+      const selectedRole = found ? found.role : (reqRole || 'student');
+
       await loadUserByEmailAndRole(email, selectedRole);
       return true;
     } catch (e) {
@@ -146,9 +145,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const switchRole = async (newRole: UserRole) => {
-    let email = 'student@university.edu';
-    if (newRole === 'teacher') email = 'teacher@university.edu';
-    if (newRole === 'admin') email = 'admin@university.edu';
+    let email = 'student1@college.com';
+    if (newRole === 'teacher') email = 'teacher1@college.com';
+    if (newRole === 'admin') email = 'admin@college.com';
 
     await loadUserByEmailAndRole(email, newRole);
   };

@@ -39,6 +39,10 @@ import { AdminStudents } from './pages/admin/AdminStudents';
 import { AdminTeachers } from './pages/admin/AdminTeachers';
 import { AdminCourses } from './pages/admin/AdminCourses';
 import { AdminSubjects } from './pages/admin/AdminSubjects';
+import { AdminTeacherAllocation } from './pages/admin/AdminTeacherAllocation';
+import { AdminStudentAllocation } from './pages/admin/AdminStudentAllocation';
+import { AdminAttendance } from './pages/admin/AdminAttendance';
+import { AdminMarks } from './pages/admin/AdminMarks';
 import { AdminCertificates } from './pages/admin/AdminCertificates';
 import { AdminNotices } from './pages/admin/AdminNotices';
 import { AdminEvents } from './pages/admin/AdminEvents';
@@ -131,6 +135,7 @@ export const App: React.FC = () => {
                 <Route path="marks" element={<TeacherMarks />} />
                 <Route path="assignments" element={<TeacherAssignments />} />
                 <Route path="exams" element={<StudentExams />} />
+                <Route path="timetable" element={<StudentTimetable />} />
                 <Route path="notices" element={<StudentNotices />} />
                 <Route path="notifications" element={<StudentNotifications />} />
                 <Route path="settings" element={<SettingsPage />} />
@@ -151,8 +156,10 @@ export const App: React.FC = () => {
                 <Route path="teachers" element={<AdminTeachers />} />
                 <Route path="courses" element={<AdminCourses />} />
                 <Route path="subjects" element={<AdminSubjects />} />
-                <Route path="attendance" element={<TeacherAttendance />} />
-                <Route path="marks" element={<TeacherMarks />} />
+                <Route path="teacher-allocations" element={<AdminTeacherAllocation />} />
+                <Route path="student-allocations" element={<AdminStudentAllocation />} />
+                <Route path="attendance" element={<AdminAttendance />} />
+                <Route path="marks" element={<AdminMarks />} />
                 <Route path="timetable" element={<StudentTimetable />} />
                 <Route path="assignments" element={<TeacherAssignments />} />
                 <Route path="exams" element={<StudentExams />} />

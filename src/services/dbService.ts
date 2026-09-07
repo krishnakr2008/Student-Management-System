@@ -5,6 +5,8 @@ import {
   INITIAL_TEACHERS,
   INITIAL_COURSES,
   INITIAL_SUBJECTS,
+  INITIAL_TEACHER_SUBJECTS,
+  INITIAL_STUDENT_SUBJECTS,
   INITIAL_ATTENDANCE,
   INITIAL_MARKS,
   INITIAL_ASSIGNMENTS,
@@ -23,6 +25,8 @@ import {
   Teacher,
   Course,
   Subject,
+  TeacherSubject,
+  StudentSubject,
   AttendanceRecord,
   SubjectAttendanceSummary,
   MarkRecord,
@@ -56,13 +60,15 @@ const setStorageData = <T>(key: string, data: T): void => {
   }
 };
 
-// Initialize default storage if empty
+// Initialize default storage if empty or reset
 export const initializeLocalStorage = () => {
   if (!localStorage.getItem('student_portal_profiles')) setStorageData('profiles', INITIAL_PROFILES);
   if (!localStorage.getItem('student_portal_students')) setStorageData('students', INITIAL_STUDENTS);
   if (!localStorage.getItem('student_portal_teachers')) setStorageData('teachers', INITIAL_TEACHERS);
   if (!localStorage.getItem('student_portal_courses')) setStorageData('courses', INITIAL_COURSES);
   if (!localStorage.getItem('student_portal_subjects')) setStorageData('subjects', INITIAL_SUBJECTS);
+  if (!localStorage.getItem('student_portal_teacher_subjects')) setStorageData('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
+  if (!localStorage.getItem('student_portal_student_subjects')) setStorageData('student_subjects', INITIAL_STUDENT_SUBJECTS);
   if (!localStorage.getItem('student_portal_attendance')) setStorageData('attendance', INITIAL_ATTENDANCE);
   if (!localStorage.getItem('student_portal_marks')) setStorageData('marks', INITIAL_MARKS);
   if (!localStorage.getItem('student_portal_assignments')) setStorageData('assignments', INITIAL_ASSIGNMENTS);
@@ -76,7 +82,6 @@ export const initializeLocalStorage = () => {
   if (!localStorage.getItem('student_portal_notifications')) setStorageData('notifications', INITIAL_NOTIFICATIONS);
 };
 
-// Run initialization immediately
 initializeLocalStorage();
 
 export const dbService = {
@@ -234,10 +239,115 @@ export const dbService = {
     return newSubj;
   },
 
-  // ATTENDANCE
+  // TEACHER-SUBJECT ALLOCATION (Requirement 4: Strict Subject Restrictions)
+  async getTeacherSubjects(teacherId?: string): Promise<TeacherSubject[]> {
+    const all = getStorageData<TeacherSubject[]>('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
+    return teacherId ? all.filter(ts => ts.teacher_id === teacherId) : all;
+  },
+
+  async assignTeacherSubject(teacherId: string, subjectId: string): Promise<TeacherSubject> {
+    const all = getStorageData<TeacherSubject[]>('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
+    const subjects = await this.getSubjects();
+    const targetSubject = subjects.find(s => s.id === subjectId);
+
+    const existing = all.find(ts => ts.teacher_id === teacherId && ts.subject_id === subjectId);
+    if (existing) return existing;
+
+    const newAllocation: TeacherSubject = {
+      id: `ts-${Date.now()}`,
+      teacher_id: teacherId,
+      subject_id: subjectId,
+      subject_name: targetSubject?.name || 'Subject',
+      subject_code: targetSubject?.code || 'SUBJ',
+      created_at: new Date().toISOString(),
+    };
+
+    all.push(newAllocation);
+    setStorageData('teacher_subjects', all);
+
+    if (isRealSupabaseConfigured()) {
+      await supabase.from('teacher_subjects').insert({ teacher_id: teacherId, subject_id: subjectId });
+    }
+
+    return newAllocation;
+  },
+
+  async removeTeacherSubject(teacherId: string, subjectId: string): Promise<boolean> {
+    const all = getStorageData<TeacherSubject[]>('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
+    const filtered = all.filter(ts => !(ts.teacher_id === teacherId && ts.subject_id === subjectId));
+    setStorageData('teacher_subjects', filtered);
+
+    if (isRealSupabaseConfigured()) {
+      await supabase.from('teacher_subjects').delete().match({ teacher_id: teacherId, subject_id: subjectId });
+    }
+
+    return true;
+  },
+
+  // STUDENT-SUBJECT ENROLLMENT
+  async getStudentSubjects(studentId?: string): Promise<StudentSubject[]> {
+    const all = getStorageData<StudentSubject[]>('student_subjects', INITIAL_STUDENT_SUBJECTS);
+    return studentId ? all.filter(ss => ss.student_id === studentId) : all;
+  },
+
+  async assignStudentSubject(studentId: string, subjectId: string): Promise<StudentSubject> {
+    const all = getStorageData<StudentSubject[]>('student_subjects', INITIAL_STUDENT_SUBJECTS);
+    const subjects = await this.getSubjects();
+    const targetSubject = subjects.find(s => s.id === subjectId);
+
+    const existing = all.find(ss => ss.student_id === studentId && ss.subject_id === subjectId);
+    if (existing) return existing;
+
+    const newEnrollment: StudentSubject = {
+      id: `ss-${Date.now()}`,
+      student_id: studentId,
+      subject_id: subjectId,
+      subject_name: targetSubject?.name,
+      subject_code: targetSubject?.code,
+    };
+
+    all.push(newEnrollment);
+    setStorageData('student_subjects', all);
+    return newEnrollment;
+  },
+
+  // TEACHER-SCOPED HELPER METHODS (Requirement 4 & 5 & 6)
+  async getTeacherAssignedSubjects(teacherId: string): Promise<Subject[]> {
+    const allocations = await this.getTeacherSubjects(teacherId);
+    const assignedSubjectIds = new Set(allocations.map(a => a.subject_id));
+    const allSubjects = await this.getSubjects();
+
+    return allSubjects.filter(s => assignedSubjectIds.has(s.id) || s.teacher_id === teacherId);
+  },
+
+  async getTeacherAssignedStudents(teacherId: string): Promise<Student[]> {
+    const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
+    const subjectIds = new Set(assignedSubjects.map(s => s.id));
+    const studentSubjects = await this.getStudentSubjects();
+    const enrolledStudentIds = new Set(
+      studentSubjects.filter(ss => subjectIds.has(ss.subject_id)).map(ss => ss.student_id)
+    );
+
+    const allStudents = await this.getStudents();
+    return allStudents.filter(st => enrolledStudentIds.has(st.id) || enrolledStudentIds.size === 0);
+  },
+
+  // ATTENDANCE WITH ADMIN OVERRIDE & TEACHER RESTRICTION
   async getStudentAttendance(studentId: string): Promise<AttendanceRecord[]> {
     const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
     return all.filter(a => a.student_id === studentId);
+  },
+
+  async getTeacherAttendance(teacherId: string): Promise<AttendanceRecord[]> {
+    const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
+    const subjectIds = new Set(assignedSubjects.map(s => s.id));
+    const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
+
+    return all.filter(a => subjectIds.has(a.subject_id) || a.marked_by === teacherId || a.teacher_id === teacherId);
+  },
+
+  async getAllAttendance(): Promise<AttendanceRecord[]> {
+    return getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
   },
 
   async getStudentAttendanceSummary(studentId: string): Promise<SubjectAttendanceSummary[]> {
@@ -280,13 +390,17 @@ export const dbService = {
 
   async markAttendanceBatch(records: Array<Omit<AttendanceRecord, 'id'>>): Promise<boolean> {
     const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
-    
+
     records.forEach(rec => {
       const existingIdx = all.findIndex(a => a.student_id === rec.student_id && a.subject_id === rec.subject_id && a.date === rec.date);
       if (existingIdx !== -1) {
-        all[existingIdx] = { ...all[existingIdx], ...rec };
+        all[existingIdx] = { ...all[existingIdx], ...rec, updated_at: new Date().toISOString() };
       } else {
-        all.push({ ...rec, id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 4)}` });
+        all.push({
+          ...rec,
+          id: `att-${Date.now()}-${Math.random().toString(36).substr(2, 4)}`,
+          created_at: new Date().toISOString(),
+        });
       }
     });
 
@@ -298,13 +412,39 @@ export const dbService = {
     return true;
   },
 
-  // MARKS & RESULTS
+  // Admin Attendance Override (Requirement 12)
+  async adminOverrideAttendance(recordId: string, status: 'present' | 'absent' | 'late', adminId: string): Promise<boolean> {
+    const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
+    const idx = all.findIndex(a => a.id === recordId);
+    if (idx !== -1) {
+      all[idx].status = status;
+      all[idx].updated_by = adminId;
+      all[idx].updated_at = new Date().toISOString();
+      setStorageData('attendance', all);
+      return true;
+    }
+    return false;
+  },
+
+  // MARKS & RESULTS WITH ADMIN OVERRIDE & TEACHER RESTRICTION
   async getStudentMarks(studentId: string): Promise<MarkRecord[]> {
     const all = getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
     return all.filter(m => m.student_id === studentId);
   },
 
-  async updateMarkRecord(id: string, updates: Partial<MarkRecord>): Promise<MarkRecord> {
+  async getTeacherMarks(teacherId: string): Promise<MarkRecord[]> {
+    const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
+    const subjectIds = new Set(assignedSubjects.map(s => s.id));
+    const all = getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
+
+    return all.filter(m => subjectIds.has(m.subject_id) || m.teacher_id === teacherId);
+  },
+
+  async getAllMarks(): Promise<MarkRecord[]> {
+    return getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
+  },
+
+  async updateMarkRecord(id: string, updates: Partial<MarkRecord>, adminOrTeacherId?: string): Promise<MarkRecord> {
     const all = getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
     const idx = all.findIndex(m => m.id === id);
     if (idx !== -1) {
@@ -313,7 +453,7 @@ export const dbService = {
                     (updates.assignment_marks ?? all[idx].assignment_marks) +
                     (updates.practical_marks ?? all[idx].practical_marks) +
                     (updates.end_sem_marks ?? all[idx].end_sem_marks);
-      
+
       let grade = 'F';
       if (total >= 90) grade = 'O';
       else if (total >= 80) grade = 'A+';
@@ -321,16 +461,30 @@ export const dbService = {
       else if (total >= 60) grade = 'B+';
       else if (total >= 50) grade = 'B';
 
-      all[idx] = { ...all[idx], ...updates, total_marks: total, grade };
+      all[idx] = {
+        ...all[idx],
+        ...updates,
+        total_marks: total,
+        grade,
+        updated_by: adminOrTeacherId,
+      };
       setStorageData('marks', all);
       return all[idx];
     }
     throw new Error('Mark record not found');
   },
 
-  // ASSIGNMENTS
+  // ASSIGNMENTS WITH TEACHER RESTRICTION
   async getAssignments(): Promise<Assignment[]> {
     return getStorageData('assignments', INITIAL_ASSIGNMENTS);
+  },
+
+  async getTeacherAssignments(teacherId: string): Promise<Assignment[]> {
+    const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
+    const subjectIds = new Set(assignedSubjects.map(s => s.id));
+    const all = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
+
+    return all.filter(a => subjectIds.has(a.subject_id) || a.teacher_id === teacherId);
   },
 
   async createAssignment(assignment: Omit<Assignment, 'id' | 'created_at'>): Promise<Assignment> {
@@ -369,7 +523,6 @@ export const dbService = {
     }
     setStorageData('submissions', all);
 
-    // Update assignment status
     const assignments = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
     const asgnIdx = assignments.findIndex(a => a.id === submission.assignment_id);
     if (asgnIdx !== -1) {
@@ -396,6 +549,14 @@ export const dbService = {
   // EXAMS
   async getExams(): Promise<Exam[]> {
     return getStorageData('exams', INITIAL_EXAMS);
+  },
+
+  async getTeacherExams(teacherId: string): Promise<Exam[]> {
+    const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
+    const subjectIds = new Set(assignedSubjects.map(s => s.id));
+    const all = getStorageData<Exam[]>('exams', INITIAL_EXAMS);
+
+    return all.filter(e => subjectIds.has(e.subject_id) || e.teacher_id === teacherId);
   },
 
   async createExam(exam: Omit<Exam, 'id'>): Promise<Exam> {

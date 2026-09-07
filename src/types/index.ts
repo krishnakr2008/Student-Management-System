@@ -1,5 +1,13 @@
 export type UserRole = 'student' | 'teacher' | 'admin';
 
+export type AssessmentType =
+  | 'Assignment'
+  | 'Quiz'
+  | 'Internal'
+  | 'Mid Semester'
+  | 'Practical'
+  | 'End Semester';
+
 export interface UserProfile {
   id: string;
   full_name: string;
@@ -38,6 +46,7 @@ export interface Teacher {
   department: string;
   designation: string;
   profile?: UserProfile;
+  assigned_subjects?: Subject[];
 }
 
 export interface Course {
@@ -63,15 +72,39 @@ export interface Subject {
   teacher_name?: string;
 }
 
-export interface AttendanceRecord {
+export interface TeacherSubject {
+  id: string;
+  teacher_id: string;
+  subject_id: string;
+  subject_name?: string;
+  subject_code?: string;
+  created_at?: string;
+}
+
+export interface StudentSubject {
   id: string;
   student_id: string;
   subject_id: string;
   subject_name?: string;
   subject_code?: string;
+  created_at?: string;
+}
+
+export interface AttendanceRecord {
+  id: string;
+  student_id: string;
+  student_name?: string;
+  roll_number?: string;
+  subject_id: string;
+  subject_name?: string;
+  subject_code?: string;
+  teacher_id?: string;
   date: string;
   status: 'present' | 'absent' | 'late';
   marked_by?: string;
+  updated_by?: string;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface SubjectAttendanceSummary {
@@ -87,9 +120,13 @@ export interface SubjectAttendanceSummary {
 export interface MarkRecord {
   id: string;
   student_id: string;
+  student_name?: string;
+  roll_number?: string;
   subject_id: string;
   subject_name?: string;
   subject_code?: string;
+  teacher_id?: string;
+  assessment_type?: AssessmentType;
   semester: number;
   internal_marks: number;
   mid_sem_marks: number;
@@ -101,6 +138,7 @@ export interface MarkRecord {
   grade: string;
   sgpa: number;
   cgpa: number;
+  updated_by?: string;
 }
 
 export interface Assignment {
@@ -108,6 +146,9 @@ export interface Assignment {
   title: string;
   subject_id: string;
   subject_name?: string;
+  subject_code?: string;
+  course_id?: string;
+  semester?: number;
   description: string;
   teacher_id: string;
   teacher_name?: string;
@@ -137,10 +178,12 @@ export interface Exam {
   name: string;
   subject_id: string;
   subject_name?: string;
+  teacher_id?: string;
   exam_type: 'mid_sem' | 'end_sem' | 'quiz' | 'practical' | 'assessment';
   exam_date: string;
   start_time: string;
   end_time: string;
+  duration?: string;
   room: string;
   instructions?: string;
   max_marks: number;
@@ -154,6 +197,7 @@ export interface TimetableSlot {
   subject_id: string;
   subject_name?: string;
   subject_code?: string;
+  teacher_id?: string;
   teacher_name?: string;
   room: string;
   type: 'Lecture' | 'Lab' | 'Tutorial';

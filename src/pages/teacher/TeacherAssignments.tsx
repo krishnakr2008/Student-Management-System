@@ -5,7 +5,7 @@ import { dbService } from '../../services/dbService';
 import { Assignment, AssignmentSubmission, Subject } from '../../types';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
-import { FileText, Plus, CheckCircle, MessageSquare, Award, Clock } from 'lucide-react';
+import { Plus, Clock, ShieldAlert } from 'lucide-react';
 
 export const TeacherAssignments: React.FC = () => {
   const { teacher } = useAuth();
@@ -16,6 +16,7 @@ export const TeacherAssignments: React.FC = () => {
   const [subjects, setSubjects] = useState<Subject[]>([]);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [selectedSub, setSelectedSub] = useState<AssignmentSubmission | null>(null);
+  const [loading, setLoading] = useState(true);
 
   const [newAsgn, setNewAsgn] = useState({
     title: '',
@@ -31,20 +32,28 @@ export const TeacherAssignments: React.FC = () => {
   });
 
   const loadData = async () => {
-    const [asgnData, subData, subjData] = await Promise.all([
-      dbService.getAssignments(),
+    if (!teacher?.id) return;
+    setLoading(true);
+
+    const [asgnData, subData, assignedSubjects] = await Promise.all([
+      dbService.getTeacherAssignments(teacher.id),
       dbService.getSubmissions(),
-      dbService.getSubjects(),
+      dbService.getTeacherAssignedSubjects(teacher.id),
     ]);
+
     setAssignments(asgnData);
     setSubmissions(subData);
-    setSubjects(subjData);
-    if (subjData.length > 0) setNewAsgn(prev => ({ ...prev, subject_id: subjData[0].id }));
+    setSubjects(assignedSubjects);
+
+    if (assignedSubjects.length > 0 && !newAsgn.subject_id) {
+      setNewAsgn(prev => ({ ...prev, subject_id: assignedSubjects[0].id }));
+    }
+    setLoading(false);
   };
 
   useEffect(() => {
     loadData();
-  }, []);
+  }, [teacher?.id]);
 
   const handleCreateAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -93,21 +102,46 @@ export const TeacherAssignments: React.FC = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="p-12 text-center text-xs font-bold text-slate-500">
+        Loading assignments and submissions...
+      </div>
+    );
+  }
+
+  if (subjects.length === 0) {
+    return (
+      <div className="p-8 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 rounded-2xl text-center space-y-3">
+        <ShieldAlert className="w-10 h-10 text-amber-500 mx-auto" />
+        <h3 className="text-base font-bold text-amber-900 dark:text-amber-200">No Subjects Assigned</h3>
+        <p className="text-xs text-amber-700 dark:text-amber-400 max-w-md mx-auto">
+          You are currently not assigned to any subject. You cannot create assignments until HOD assigns subjects to you.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-            Assignment Management
-          </h1>
+          <div className="flex items-center gap-2">
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+              Coursework & Assignments
+            </h1>
+            <span className="px-2 py-0.5 text-[10px] font-extrabold uppercase tracking-wide bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300 rounded-md">
+              Faculty Access
+            </span>
+          </div>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Publish new coursework tasks, review digital submissions, and issue grades with feedback
+            Publish coursework for your assigned subjects ({subjects.map(s => s.code).join(', ')})
           </p>
         </div>
 
         <button
           onClick={() => setIsCreateOpen(true)}
-          className="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-500 text-white font-bold text-xs shadow-xs flex items-center gap-2"
+          className="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs shadow-xs flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
           <span>Create Assignment</span>
@@ -123,7 +157,7 @@ export const TeacherAssignments: React.FC = () => {
           >
             <div className="flex items-start justify-between">
               <div>
-                <span className="text-[10px] font-bold uppercase text-brand-600 dark:text-brand-400">
+                <span className="text-[10px] font-bold uppercase text-emerald-600 dark:text-emerald-400">
                   {asgn.subject_name}
                 </span>
                 <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 mt-0.5">{asgn.title}</h3>
@@ -173,7 +207,7 @@ export const TeacherAssignments: React.FC = () => {
                   <td className="px-6 py-4">
                     <Badge variant={sub.status === 'graded' ? 'graded' : 'submitted'}>{sub.status}</Badge>
                   </td>
-                  <td className="px-6 py-4 font-extrabold text-brand-600 dark:text-brand-400">
+                  <td className="px-6 py-4 font-extrabold text-emerald-600 dark:text-emerald-400">
                     {sub.grade !== undefined ? `${sub.grade} Marks` : 'Un-graded'}
                   </td>
                   <td className="px-6 py-4">
@@ -182,7 +216,7 @@ export const TeacherAssignments: React.FC = () => {
                         setSelectedSub(sub);
                         setGradeData({ grade: sub.grade || 45, remarks: sub.remarks || '' });
                       }}
-                      className="px-3 py-1 bg-brand-600 text-white rounded-lg text-xs font-bold hover:bg-brand-500"
+                      className="px-3 py-1 bg-emerald-600 text-white rounded-lg text-xs font-bold hover:bg-emerald-500"
                     >
                       {sub.status === 'graded' ? 'Re-grade' : 'Grade Submission'}
                     </button>
@@ -217,14 +251,16 @@ export const TeacherAssignments: React.FC = () => {
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Subject</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Subject (Assigned Only)</label>
                 <select
                   value={newAsgn.subject_id}
                   onChange={e => setNewAsgn({ ...newAsgn, subject_id: e.target.value })}
                   className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
                 >
                   {subjects.map(s => (
-                    <option key={s.id} value={s.id}>{s.name}</option>
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.code})
+                    </option>
                   ))}
                 </select>
               </div>
@@ -273,7 +309,7 @@ export const TeacherAssignments: React.FC = () => {
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-500 rounded-xl shadow-xs"
+                className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-xs"
               >
                 Publish Assignment
               </button>

@@ -1,11 +1,11 @@
 -- ====================================================
 -- SMART STUDENT MANAGEMENT & CAREER PORTAL DATABASE SCHEMA
+-- WITH STRICT ROLE-BASED ACCESS CONTROL & RLS POLICIES
 -- ====================================================
 
--- Enable UUID Extension
 CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
--- 1. PROFILES (Extends Supabase auth.users)
+-- 1. PROFILES
 CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL,
@@ -73,23 +73,46 @@ CREATE TABLE IF NOT EXISTS public.subjects (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 6. ATTENDANCE
+-- 6. TEACHER SUBJECT ALLOCATION (Explicit M:N mapping)
+CREATE TABLE IF NOT EXISTS public.teacher_subjects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(teacher_id, subject_id)
+);
+
+-- 7. STUDENT SUBJECT ENROLLMENT (Explicit M:N mapping)
+CREATE TABLE IF NOT EXISTS public.student_subjects (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    UNIQUE(student_id, subject_id)
+);
+
+-- 8. ATTENDANCE
 CREATE TABLE IF NOT EXISTS public.attendance (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
     subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES public.teachers(id),
     date DATE NOT NULL,
     status TEXT NOT NULL CHECK (status IN ('present', 'absent', 'late')),
-    marked_by UUID REFERENCES public.teachers(id),
+    marked_by UUID REFERENCES public.profiles(id),
+    updated_by UUID REFERENCES public.profiles(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     UNIQUE(student_id, subject_id, date)
 );
 
--- 7. MARKS & RESULTS
+-- 9. MARKS & RESULTS
 CREATE TABLE IF NOT EXISTS public.marks (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
     subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES public.teachers(id),
+    assessment_type TEXT DEFAULT 'End Semester',
     semester INT NOT NULL,
     internal_marks NUMERIC(5,2) DEFAULT 0,
     mid_sem_marks NUMERIC(5,2) DEFAULT 0,
@@ -101,15 +124,18 @@ CREATE TABLE IF NOT EXISTS public.marks (
     grade TEXT,
     sgpa NUMERIC(4,2),
     cgpa NUMERIC(4,2),
+    updated_by UUID REFERENCES public.profiles(id),
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL,
     UNIQUE(student_id, subject_id, semester)
 );
 
--- 8. ASSIGNMENTS
+-- 10. ASSIGNMENTS
 CREATE TABLE IF NOT EXISTS public.assignments (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
     subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    course_id UUID REFERENCES public.courses(id),
+    semester INT DEFAULT 5,
     description TEXT NOT NULL,
     teacher_id UUID NOT NULL REFERENCES public.teachers(id) ON DELETE CASCADE,
     due_date TIMESTAMP WITH TIME ZONE NOT NULL,
@@ -118,7 +144,7 @@ CREATE TABLE IF NOT EXISTS public.assignments (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 9. ASSIGNMENT SUBMISSIONS
+-- 11. ASSIGNMENT SUBMISSIONS
 CREATE TABLE IF NOT EXISTS public.assignment_submissions (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     assignment_id UUID NOT NULL REFERENCES public.assignments(id) ON DELETE CASCADE,
@@ -131,11 +157,12 @@ CREATE TABLE IF NOT EXISTS public.assignment_submissions (
     UNIQUE(assignment_id, student_id)
 );
 
--- 10. EXAMS & ASSESSMENTS
+-- 12. EXAMS & ASSESSMENTS
 CREATE TABLE IF NOT EXISTS public.exams (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     name TEXT NOT NULL,
     subject_id UUID NOT NULL REFERENCES public.subjects(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES public.teachers(id),
     exam_type TEXT NOT NULL CHECK (exam_type IN ('mid_sem', 'end_sem', 'quiz', 'practical', 'assessment')),
     exam_date DATE NOT NULL,
     start_time TIME NOT NULL,
@@ -146,7 +173,7 @@ CREATE TABLE IF NOT EXISTS public.exams (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 11. TIMETABLE
+-- 13. TIMETABLE
 CREATE TABLE IF NOT EXISTS public.timetable (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     day TEXT NOT NULL CHECK (day IN ('Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday')),
@@ -159,7 +186,7 @@ CREATE TABLE IF NOT EXISTS public.timetable (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 12. NOTICES
+-- 14. NOTICES
 CREATE TABLE IF NOT EXISTS public.notices (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
@@ -174,7 +201,7 @@ CREATE TABLE IF NOT EXISTS public.notices (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 13. EVENTS
+-- 15. EVENTS
 CREATE TABLE IF NOT EXISTS public.events (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     title TEXT NOT NULL,
@@ -186,7 +213,7 @@ CREATE TABLE IF NOT EXISTS public.events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 14. CERTIFICATES
+-- 16. CERTIFICATES
 CREATE TABLE IF NOT EXISTS public.certificates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
@@ -203,7 +230,7 @@ CREATE TABLE IF NOT EXISTS public.certificates (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 15. RESUMES
+-- 17. RESUMES
 CREATE TABLE IF NOT EXISTS public.resumes (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID UNIQUE NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
@@ -226,7 +253,7 @@ CREATE TABLE IF NOT EXISTS public.resumes (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 16. NOTIFICATIONS
+-- 18. NOTIFICATIONS
 CREATE TABLE IF NOT EXISTS public.notifications (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     user_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
@@ -237,18 +264,6 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 17. CAREER PROGRESS & INTERVIEW TRACKER
-CREATE TABLE IF NOT EXISTS public.career_progress (
-    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
-    student_id UUID UNIQUE NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
-    target_career TEXT NOT NULL DEFAULT 'Frontend Developer',
-    selected_skills JSONB DEFAULT '[]'::jsonb,
-    roadmap_progress JSONB DEFAULT '{}'::jsonb,
-    project_status JSONB DEFAULT '{}'::jsonb,
-    interview_progress JSONB DEFAULT '{}'::jsonb,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
-);
-
 -- ====================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================
@@ -257,6 +272,8 @@ ALTER TABLE public.students ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.teachers ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.courses ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.teacher_subjects ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.student_subjects ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.marks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.assignments ENABLE ROW LEVEL SECURITY;
@@ -268,44 +285,63 @@ ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.resumes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
-ALTER TABLE public.career_progress ENABLE ROW LEVEL SECURITY;
 
--- Basic Public Access policies (Read/Write according to user role)
-CREATE POLICY "Public read profiles" ON public.profiles FOR SELECT USING (true);
-CREATE POLICY "Users update own profile" ON public.profiles FOR UPDATE USING (auth.uid() = id);
+-- Helper Function: Check Admin
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE POLICY "Public read courses" ON public.courses FOR SELECT USING (true);
-CREATE POLICY "Admin write courses" ON public.courses FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
+-- Helper Function: Check Teacher Assigned Subject
+CREATE OR REPLACE FUNCTION public.is_teacher_assigned_subject(sub_id UUID)
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (
+    SELECT 1 FROM public.teacher_subjects ts
+    JOIN public.teachers t ON t.id = ts.teacher_id
+    WHERE t.profile_id = auth.uid() AND ts.subject_id = sub_id
+  ) OR public.is_admin();
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE POLICY "Public read subjects" ON public.subjects FOR SELECT USING (true);
-CREATE POLICY "Admin write subjects" ON public.subjects FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
-);
+-- ADMIN FULL ACCESS POLICIES
+CREATE POLICY "Admin full access profiles" ON public.profiles FOR ALL USING (public.is_admin() OR auth.uid() = id);
+CREATE POLICY "Admin full access students" ON public.students FOR ALL USING (public.is_admin() OR profile_id = auth.uid());
+CREATE POLICY "Admin full access teachers" ON public.teachers FOR ALL USING (public.is_admin() OR profile_id = auth.uid());
+CREATE POLICY "Admin full access courses" ON public.courses FOR ALL USING (true);
+CREATE POLICY "Admin full access subjects" ON public.subjects FOR ALL USING (true);
+CREATE POLICY "Admin full access teacher_subjects" ON public.teacher_subjects FOR ALL USING (true);
+CREATE POLICY "Admin full access student_subjects" ON public.student_subjects FOR ALL USING (true);
 
-CREATE POLICY "Public read notices" ON public.notices FOR SELECT USING (true);
-CREATE POLICY "Admin/Teacher write notices" ON public.notices FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'teacher'))
-);
-
-CREATE POLICY "Public read events" ON public.events FOR SELECT USING (true);
-
--- Student Policies
-CREATE POLICY "Student read own details" ON public.students FOR SELECT USING (true);
-CREATE POLICY "Student read own attendance" ON public.attendance FOR SELECT USING (true);
-CREATE POLICY "Student read own marks" ON public.marks FOR SELECT USING (true);
-CREATE POLICY "Student manage own certificates" ON public.certificates FOR ALL USING (
+-- TEACHER SUBJECT SCOPED POLICIES
+CREATE POLICY "Teacher read attendance" ON public.attendance FOR SELECT USING (
+    public.is_teacher_assigned_subject(subject_id) OR
     student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid())
 );
-CREATE POLICY "Student manage own resume" ON public.resumes FOR ALL USING (
+
+CREATE POLICY "Teacher write attendance" ON public.attendance FOR INSERT WITH CHECK (
+    public.is_teacher_assigned_subject(subject_id)
+);
+
+CREATE POLICY "Teacher update attendance" ON public.attendance FOR UPDATE USING (
+    public.is_teacher_assigned_subject(subject_id)
+);
+
+CREATE POLICY "Teacher read marks" ON public.marks FOR SELECT USING (
+    public.is_teacher_assigned_subject(subject_id) OR
     student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid())
 );
 
--- Teacher & Admin Policies
-CREATE POLICY "Teacher/Admin manage attendance" ON public.attendance FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'teacher'))
+CREATE POLICY "Teacher write marks" ON public.marks FOR ALL USING (
+    public.is_teacher_assigned_subject(subject_id)
 );
-CREATE POLICY "Teacher/Admin manage marks" ON public.marks FOR ALL USING (
-    EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('admin', 'teacher'))
+
+CREATE POLICY "Teacher manage assignments" ON public.assignments FOR ALL USING (
+    public.is_teacher_assigned_subject(subject_id)
+);
+
+CREATE POLICY "Teacher manage exams" ON public.exams FOR ALL USING (
+    public.is_teacher_assigned_subject(subject_id)
 );

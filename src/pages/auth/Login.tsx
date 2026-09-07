@@ -10,7 +10,7 @@ export const Login: React.FC = () => {
   const { login } = useAuth();
   const { showToast } = useToast();
 
-  const [email, setEmail] = useState('student@university.edu');
+  const [email, setEmail] = useState('student1@college.com');
   const [password, setPassword] = useState('password123');
   const [showPassword, setShowPassword] = useState(false);
   const [selectedRole, setSelectedRole] = useState<UserRole>('student');
@@ -28,18 +28,19 @@ export const Login: React.FC = () => {
     setIsSubmitting(false);
 
     if (success) {
-      showToast('Login Successful', `Welcome back to the ${selectedRole} portal!`, 'success');
-      navigate(`/${selectedRole}/dashboard`);
+      showToast('Login Successful', 'Welcome to the portal!', 'success');
+      // Automatic role redirection (Requirement 15)
+      if (email.includes('admin') || selectedRole === 'admin') navigate('/admin/dashboard');
+      else if (email.includes('teacher') || selectedRole === 'teacher') navigate('/teacher/dashboard');
+      else navigate('/student/dashboard');
     } else {
       showToast('Authentication Failed', 'Invalid credentials or user record not found.', 'error');
     }
   };
 
-  const handleQuickFill = (role: UserRole) => {
-    setSelectedRole(role);
-    if (role === 'student') setEmail('student@university.edu');
-    else if (role === 'teacher') setEmail('teacher@university.edu');
-    else setEmail('admin@university.edu');
+  const handleQuickFill = (emailValue: string, roleValue: UserRole) => {
+    setSelectedRole(roleValue);
+    setEmail(emailValue);
   };
 
   return (
@@ -54,25 +55,44 @@ export const Login: React.FC = () => {
             <GraduationCap className="w-8 h-8" />
           </div>
           <h2 className="text-2xl font-black text-white tracking-tight">Portal Login</h2>
-          <p className="text-xs text-slate-400">Select your role to sign into Smart UniPortal</p>
+          <p className="text-xs text-slate-400">Select role & login to Smart Student Management Portal</p>
         </div>
 
         {/* Role Selector Tabs */}
         <div className="grid grid-cols-3 gap-1.5 p-1.5 bg-slate-950 border border-slate-800 rounded-2xl text-xs font-bold">
-          {(['student', 'teacher', 'admin'] as UserRole[]).map(r => (
-            <button
-              key={r}
-              type="button"
-              onClick={() => handleQuickFill(r)}
-              className={`py-2 rounded-xl capitalize transition-all ${
-                selectedRole === r
-                  ? 'bg-brand-600 text-white shadow-xs'
-                  : 'text-slate-400 hover:text-white hover:bg-slate-900'
-              }`}
-            >
-              {r}
-            </button>
-          ))}
+          <button
+            type="button"
+            onClick={() => handleQuickFill('student1@college.com', 'student')}
+            className={`py-2 rounded-xl capitalize transition-all ${
+              selectedRole === 'student'
+                ? 'bg-brand-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Student
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickFill('teacher1@college.com', 'teacher')}
+            className={`py-2 rounded-xl capitalize transition-all ${
+              selectedRole === 'teacher'
+                ? 'bg-brand-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Teacher
+          </button>
+          <button
+            type="button"
+            onClick={() => handleQuickFill('admin@college.com', 'admin')}
+            className={`py-2 rounded-xl capitalize transition-all ${
+              selectedRole === 'admin'
+                ? 'bg-brand-600 text-white shadow-xs'
+                : 'text-slate-400 hover:text-white'
+            }`}
+          >
+            Admin / HOD
+          </button>
         </div>
 
         {/* Login Form */}
@@ -86,7 +106,7 @@ export const Login: React.FC = () => {
                 required
                 value={email}
                 onChange={e => setEmail(e.target.value)}
-                placeholder="name@university.edu"
+                placeholder="name@college.com"
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden transition-colors"
               />
             </div>
@@ -135,34 +155,47 @@ export const Login: React.FC = () => {
           </button>
         </form>
 
-        {/* Quick Viva Demo Fillers */}
-        <div className="pt-2 border-t border-slate-800 text-center space-y-2">
-          <span className="text-[11px] font-semibold text-slate-500 uppercase tracking-wider block">
-            Technical Viva Demo Fillers
+        {/* Test Accounts (Requirement 19) */}
+        <div className="pt-3 border-t border-slate-800 text-center space-y-2">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+            Requirement 19 Test Accounts
           </span>
-          <div className="flex justify-center gap-2 text-xs">
+          <div className="grid grid-cols-2 gap-1.5 text-xs font-semibold">
             <button
-              onClick={() => handleQuickFill('student')}
-              className="px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-brand-400 border border-slate-800 rounded-lg"
+              onClick={() => handleQuickFill('admin@college.com', 'admin')}
+              className="p-2 bg-slate-950 hover:bg-purple-950/40 text-purple-400 border border-slate-800 rounded-xl text-left"
             >
-              Demo Student
+              <span className="block font-bold">Admin / HOD</span>
+              <span className="text-[10px] text-slate-400">admin@college.com</span>
             </button>
+
             <button
-              onClick={() => handleQuickFill('teacher')}
-              className="px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-emerald-400 border border-slate-800 rounded-lg"
+              onClick={() => handleQuickFill('teacher1@college.com', 'teacher')}
+              className="p-2 bg-slate-950 hover:bg-emerald-950/40 text-emerald-400 border border-slate-800 rounded-xl text-left"
             >
-              Demo Teacher
+              <span className="block font-bold">Teacher 1 (C++)</span>
+              <span className="text-[10px] text-slate-400">teacher1@college.com</span>
             </button>
+
             <button
-              onClick={() => handleQuickFill('admin')}
-              className="px-2.5 py-1 bg-slate-950 hover:bg-slate-800 text-purple-400 border border-slate-800 rounded-lg"
+              onClick={() => handleQuickFill('teacher2@college.com', 'teacher')}
+              className="p-2 bg-slate-950 hover:bg-sky-950/40 text-sky-400 border border-slate-800 rounded-xl text-left"
             >
-              Demo Admin
+              <span className="block font-bold">Teacher 2 (Math)</span>
+              <span className="text-[10px] text-slate-400">teacher2@college.com</span>
+            </button>
+
+            <button
+              onClick={() => handleQuickFill('student1@college.com', 'student')}
+              className="p-2 bg-slate-950 hover:bg-brand-950/40 text-brand-400 border border-slate-800 rounded-xl text-left"
+            >
+              <span className="block font-bold">Student 1</span>
+              <span className="text-[10px] text-slate-400">student1@college.com</span>
             </button>
           </div>
         </div>
 
-        <div className="text-center text-xs text-slate-400 pt-2">
+        <div className="text-center text-xs text-slate-400">
           Don't have an account?{' '}
           <Link to="/signup" className="text-brand-400 font-bold hover:underline">
             Sign Up

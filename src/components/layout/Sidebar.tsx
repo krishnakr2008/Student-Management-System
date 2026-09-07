@@ -22,6 +22,8 @@ import {
   CheckCircle,
   Megaphone,
   Calendar,
+  Layers,
+  UserPlus,
   X,
 } from 'lucide-react';
 
@@ -31,7 +33,7 @@ interface SidebarProps {
 }
 
 export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile }) => {
-  const { role, user, student, logout } = useAuth();
+  const { role, user, student, teacher, logout } = useAuth();
   const navigate = useNavigate();
 
   const handleLogout = () => {
@@ -46,10 +48,11 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     highlight?: boolean;
   }
 
+  // Requirement 9: Student Navigation
   const getStudentItems = (): NavItem[] => [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/student/dashboard' },
     { label: 'My Profile', icon: User, path: '/student/profile' },
-    { label: 'Academics', icon: BookOpen, path: '/student/academics' },
+    { label: 'Subjects', icon: BookOpen, path: '/student/academics' },
     { label: 'Attendance', icon: CalendarCheck, path: '/student/attendance' },
     { label: 'Marks & Results', icon: Award, path: '/student/marks' },
     { label: 'Performance Analytics', icon: BarChart3, path: '/student/analytics' },
@@ -65,34 +68,38 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
     { label: 'Settings', icon: Settings, path: '/student/settings' },
   ];
 
+  // Requirement 3: Teacher Navigation (Teaching-focused, NO Admin controls)
   const getTeacherItems = (): NavItem[] => [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/teacher/dashboard' },
     { label: 'My Profile', icon: User, path: '/teacher/profile' },
     { label: 'My Subjects', icon: BookOpen, path: '/teacher/subjects' },
     { label: 'My Students', icon: Users, path: '/teacher/students' },
     { label: 'Attendance', icon: CalendarCheck, path: '/teacher/attendance' },
-    { label: 'Marks', icon: Award, path: '/teacher/marks' },
+    { label: 'Marks & Results', icon: Award, path: '/teacher/marks' },
     { label: 'Assignments', icon: FileText, path: '/teacher/assignments' },
-    { label: 'Exams', icon: CheckCircle, path: '/teacher/exams' },
-    { label: 'Notices', icon: Megaphone, path: '/teacher/notices' },
+    { label: 'Exams & Assessments', icon: CheckCircle, path: '/teacher/exams' },
+    { label: 'Timetable', icon: Clock, path: '/teacher/timetable' },
     { label: 'Notifications', icon: Bell, path: '/teacher/notifications' },
     { label: 'Settings', icon: Settings, path: '/teacher/settings' },
   ];
 
+  // Requirement 2: Admin / HOD Navigation (Complete institutional control)
   const getAdminItems = (): NavItem[] => [
     { label: 'Dashboard', icon: LayoutDashboard, path: '/admin/dashboard' },
     { label: 'Students', icon: Users, path: '/admin/students' },
     { label: 'Teachers', icon: UserCheck, path: '/admin/teachers' },
     { label: 'Courses', icon: BookOpen, path: '/admin/courses' },
     { label: 'Subjects', icon: BookOpen, path: '/admin/subjects' },
+    { label: 'Student Allocations', icon: UserPlus, path: '/admin/student-allocations' },
+    { label: 'Teacher Allocations', icon: Layers, path: '/admin/teacher-allocations' },
     { label: 'Attendance Control', icon: CalendarCheck, path: '/admin/attendance' },
-    { label: 'Marks Control', icon: Award, path: '/admin/marks' },
-    { label: 'Timetable', icon: Clock, path: '/admin/timetable' },
+    { label: 'Marks & Results', icon: Award, path: '/admin/marks' },
     { label: 'Assignments', icon: FileText, path: '/admin/assignments' },
-    { label: 'Exams', icon: CheckCircle, path: '/admin/exams' },
+    { label: 'Exams & Assessments', icon: CheckCircle, path: '/admin/exams' },
+    { label: 'Timetable', icon: Clock, path: '/admin/timetable' },
     { label: 'Notices', icon: Megaphone, path: '/admin/notices' },
-    { label: 'Certificates', icon: FileCheck, path: '/admin/certificates' },
-    { label: 'Events', icon: Calendar, path: '/admin/events' },
+    { label: 'Events & Calendar', icon: Calendar, path: '/admin/events' },
+    { label: 'Certificates Audit', icon: FileCheck, path: '/admin/certificates' },
     { label: 'Reports & Analytics', icon: BarChart3, path: '/admin/reports' },
     { label: 'Notifications', icon: Bell, path: '/admin/notifications' },
     { label: 'Settings', icon: Settings, path: '/admin/settings' },
@@ -123,15 +130,19 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
         {/* Header Branding */}
         <div className="flex items-center justify-between h-16 px-6 border-b border-slate-100 dark:border-slate-800 shrink-0">
           <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigate('/')}>
-            <div className="p-2 bg-brand-600 rounded-xl text-white shadow-xs">
+            <div className={`p-2.5 rounded-xl text-white shadow-xs ${
+              role === 'admin' ? 'bg-purple-600' : role === 'teacher' ? 'bg-emerald-600' : 'bg-brand-600'
+            }`}>
               <GraduationCap className="w-5 h-5" />
             </div>
             <div>
               <span className="font-bold text-base text-slate-900 dark:text-slate-100 tracking-tight block leading-tight">
                 UniPortal
               </span>
-              <span className="text-[10px] font-semibold tracking-wide text-brand-600 dark:text-brand-400 uppercase">
-                {role} Portal
+              <span className={`text-[10px] font-bold tracking-wide uppercase ${
+                role === 'admin' ? 'text-purple-600 dark:text-purple-400' : role === 'teacher' ? 'text-emerald-600 dark:text-emerald-400' : 'text-brand-600 dark:text-brand-400'
+              }`}>
+                {role === 'admin' ? 'HOD / ADMIN' : role === 'teacher' ? 'TEACHER' : 'STUDENT'} PORTAL
               </span>
             </div>
           </div>
@@ -144,7 +155,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
           </button>
         </div>
 
-        {/* User Card */}
+        {/* User Profile Info Card */}
         <div className="p-4 mx-3 my-2 rounded-xl bg-slate-50 dark:bg-slate-800/50 border border-slate-200/50 dark:border-slate-800/60 flex items-center gap-3 shrink-0">
           <img
             src={
@@ -159,7 +170,7 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
               {user?.full_name || 'User'}
             </h4>
             <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
-              {student ? `ID: ${student.student_id_code}` : user?.email}
+              {student ? `ID: ${student.student_id_code}` : teacher ? `ID: ${teacher.teacher_id_code}` : user?.email}
             </p>
           </div>
         </div>
@@ -176,9 +187,13 @@ export const Sidebar: React.FC<SidebarProps> = ({ isMobileOpen, onCloseMobile })
                 className={({ isActive }) =>
                   `flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-semibold transition-all duration-150 ${
                     isActive
-                      ? 'bg-brand-600 text-white shadow-xs'
+                      ? role === 'admin'
+                        ? 'bg-purple-600 text-white shadow-xs'
+                        : role === 'teacher'
+                        ? 'bg-emerald-600 text-white shadow-xs'
+                        : 'bg-brand-600 text-white shadow-xs'
                       : item.highlight
-                      ? 'bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 hover:bg-brand-50 dark:hover:bg-slate-800'
+                      ? 'bg-gradient-to-r from-amber-500/10 via-purple-500/10 to-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/20 hover:bg-brand-50'
                       : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100 hover:bg-slate-100 dark:hover:bg-slate-800/60'
                   }`
                 }
