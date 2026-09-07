@@ -60,7 +60,7 @@ const setStorageData = <T>(key: string, data: T): void => {
   }
 };
 
-// Initialize default storage if empty or reset
+// Initialize default storage if empty
 export const initializeLocalStorage = () => {
   if (!localStorage.getItem('student_portal_profiles')) setStorageData('profiles', INITIAL_PROFILES);
   if (!localStorage.getItem('student_portal_students')) setStorageData('students', INITIAL_STUDENTS);
@@ -89,7 +89,8 @@ export const dbService = {
   async getProfiles(): Promise<UserProfile[]> {
     if (isRealSupabaseConfigured()) {
       const { data, error } = await supabase.from('profiles').select('*');
-      if (!error && data) return data as UserProfile[];
+      if (error) throw new Error(error.message);
+      return data as UserProfile[];
     }
     return getStorageData('profiles', INITIAL_PROFILES);
   },
@@ -97,7 +98,8 @@ export const dbService = {
   async updateProfile(id: string, updates: Partial<UserProfile>): Promise<UserProfile> {
     if (isRealSupabaseConfigured()) {
       const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select().single();
-      if (!error && data) return data as UserProfile;
+      if (error) throw new Error(error.message);
+      return data as UserProfile;
     }
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
     const index = profiles.findIndex(p => p.id === id);
@@ -106,27 +108,59 @@ export const dbService = {
       setStorageData('profiles', profiles);
       return profiles[index];
     }
-    throw new Error('Profile not found');
+    throw new Error('Profile record not found.');
   },
 
   // STUDENTS
-  async getStudents(): Promise<Student[]> {
+  async getStudents(includeInactive = false): Promise<Student[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('students').select('*, profile:profiles(*)');
-      if (!error && data) return data as Student[];
+      let query = supabase.from('students').select('*, profile:profiles(*)');
+      if (!includeInactive) {
+        query = query.eq('active', true);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as Student[];
     }
-    return getStorageData('students', INITIAL_STUDENTS);
+    const students = getStorageData<Student[]>('students', INITIAL_STUDENTS);
+    return includeInactive ? students : students.filter(s => s.active !== false);
   },
 
   async createStudent(studentData: Omit<Student, 'id'>, profileData: Omit<UserProfile, 'id'>): Promise<Student> {
+    const existing = await this.getStudents(true);
+    if (existing.some(s => s.roll_number.toLowerCase() === studentData.roll_number.toLowerCase())) {
+      throw new Error(`Roll number "${studentData.roll_number}" is already registered to another student.`);
+    }
+    if (existing.some(s => s.student_id_code.toLowerCase() === studentData.student_id_code.toLowerCase())) {
+      throw new Error(`Student ID code "${studentData.student_id_code}" is already registered.`);
+    }
+
     const newId = `student-${Date.now()}`;
     const newProfileId = `user-${Date.now()}`;
     const newProfile: UserProfile = { ...profileData, id: newProfileId, role: 'student', created_at: new Date().toISOString() };
-    const newStudent: Student = { ...studentData, id: newId, profile_id: newProfileId, profile: newProfile };
+    const newStudent: Student = { ...studentData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
 
     if (isRealSupabaseConfigured()) {
-      await supabase.from('profiles').insert(newProfile);
-      await supabase.from('students').insert({ ...studentData, id: newId, profile_id: newProfileId });
+      const { error: pErr } = await supabase.from('profiles').insert(newProfile);
+      if (pErr) throw new Error(pErr.message);
+
+      const { error: sErr } = await supabase.from('students').insert({
+        id: newId,
+        profile_id: newProfileId,
+        student_id_code: studentData.student_id_code,
+        course_id: studentData.course_id,
+        department: studentData.department,
+        branch: studentData.branch,
+        semester: studentData.semester,
+        section: studentData.section,
+        roll_number: studentData.roll_number,
+        admission_year: studentData.admission_year,
+        guardian_name: studentData.guardian_name,
+        guardian_phone: studentData.guardian_phone,
+        guardian_relation: studentData.guardian_relation,
+        active: true,
+      });
+      if (sErr) throw new Error(sErr.message);
     }
 
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
@@ -143,44 +177,75 @@ export const dbService = {
   async updateStudent(id: string, updates: Partial<Student>): Promise<Student> {
     const students = getStorageData<Student[]>('students', INITIAL_STUDENTS);
     const index = students.findIndex(s => s.id === id);
-    if (index !== -1) {
-      students[index] = { ...students[index], ...updates };
-      setStorageData('students', students);
+    if (index === -1) throw new Error('Student record not found.');
 
-      if (isRealSupabaseConfigured()) {
-        const { profile, ...fields } = updates;
-        await supabase.from('students').update(fields).eq('id', id);
-      }
-      return students[index];
+    students[index] = { ...students[index], ...updates };
+    setStorageData('students', students);
+
+    if (isRealSupabaseConfigured()) {
+      const { profile, ...fields } = updates;
+      const { error } = await supabase.from('students').update(fields).eq('id', id);
+      if (error) throw new Error(error.message);
     }
-    throw new Error('Student not found');
+    return students[index];
   },
 
   async deleteStudent(id: string): Promise<boolean> {
+    // Soft Delete to preserve historical attendance & grade integrity
     const students = getStorageData<Student[]>('students', INITIAL_STUDENTS);
-    const filtered = students.filter(s => s.id !== id);
-    setStorageData('students', filtered);
+    const index = students.findIndex(s => s.id === id);
+    if (index !== -1) {
+      students[index].active = false;
+      setStorageData('students', students);
+    }
 
     if (isRealSupabaseConfigured()) {
-      await supabase.from('students').delete().eq('id', id);
+      const { error } = await supabase.from('students').update({ active: false }).eq('id', id);
+      if (error) throw new Error(error.message);
     }
     return true;
   },
 
   // TEACHERS
-  async getTeachers(): Promise<Teacher[]> {
+  async getTeachers(includeInactive = false): Promise<Teacher[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('teachers').select('*, profile:profiles(*)');
-      if (!error && data) return data as Teacher[];
+      let query = supabase.from('teachers').select('*, profile:profiles(*)');
+      if (!includeInactive) {
+        query = query.eq('active', true);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as Teacher[];
     }
-    return getStorageData('teachers', INITIAL_TEACHERS);
+    const teachers = getStorageData<Teacher[]>('teachers', INITIAL_TEACHERS);
+    return includeInactive ? teachers : teachers.filter(t => t.active !== false);
   },
 
   async createTeacher(teacherData: Omit<Teacher, 'id'>, profileData: Omit<UserProfile, 'id'>): Promise<Teacher> {
+    const existing = await this.getTeachers(true);
+    if (existing.some(t => t.teacher_id_code.toLowerCase() === teacherData.teacher_id_code.toLowerCase())) {
+      throw new Error(`Teacher ID code "${teacherData.teacher_id_code}" is already in use.`);
+    }
+
     const newId = `teacher-${Date.now()}`;
     const newProfileId = `user-teacher-${Date.now()}`;
     const newProfile: UserProfile = { ...profileData, id: newProfileId, role: 'teacher', created_at: new Date().toISOString() };
-    const newTeacher: Teacher = { ...teacherData, id: newId, profile_id: newProfileId, profile: newProfile };
+    const newTeacher: Teacher = { ...teacherData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
+
+    if (isRealSupabaseConfigured()) {
+      const { error: pErr } = await supabase.from('profiles').insert(newProfile);
+      if (pErr) throw new Error(pErr.message);
+
+      const { error: tErr } = await supabase.from('teachers').insert({
+        id: newId,
+        profile_id: newProfileId,
+        teacher_id_code: teacherData.teacher_id_code,
+        department: teacherData.department,
+        designation: teacherData.designation,
+        active: true,
+      });
+      if (tErr) throw new Error(tErr.message);
+    }
 
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
     profiles.push(newProfile);
@@ -190,64 +255,139 @@ export const dbService = {
     teachers.push(newTeacher);
     setStorageData('teachers', teachers);
 
-    if (isRealSupabaseConfigured()) {
-      await supabase.from('profiles').insert(newProfile);
-      await supabase.from('teachers').insert({ ...teacherData, id: newId, profile_id: newProfileId });
-    }
-
     return newTeacher;
   },
 
-  // COURSES & SUBJECTS
-  async getCourses(): Promise<Course[]> {
-    if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('courses').select('*');
-      if (!error && data) return data as Course[];
+  async deleteTeacher(id: string): Promise<boolean> {
+    const teachers = getStorageData<Teacher[]>('teachers', INITIAL_TEACHERS);
+    const index = teachers.findIndex(t => t.id === id);
+    if (index !== -1) {
+      teachers[index].active = false;
+      setStorageData('teachers', teachers);
     }
-    return getStorageData('courses', INITIAL_COURSES);
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('teachers').update({ active: false }).eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+    return true;
+  },
+
+  // COURSES & SUBJECTS
+  async getCourses(includeInactive = false): Promise<Course[]> {
+    if (isRealSupabaseConfigured()) {
+      let query = supabase.from('courses').select('*');
+      if (!includeInactive) {
+        query = query.eq('active', true);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as Course[];
+    }
+    const courses = getStorageData<Course[]>('courses', INITIAL_COURSES);
+    return includeInactive ? courses : courses.filter(c => c.active !== false);
   },
 
   async createCourse(course: Omit<Course, 'id'>): Promise<Course> {
+    const existing = await this.getCourses(true);
+    if (existing.some(c => c.code.toLowerCase() === course.code.toLowerCase())) {
+      throw new Error(`Course code "${course.code}" already exists.`);
+    }
+
     const newCourse: Course = { ...course, id: `course-${Date.now()}`, active: true, student_count: 0 };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('courses').insert(newCourse);
+      if (error) throw new Error(error.message);
+    }
+
     const courses = getStorageData<Course[]>('courses', INITIAL_COURSES);
     courses.push(newCourse);
     setStorageData('courses', courses);
 
-    if (isRealSupabaseConfigured()) {
-      await supabase.from('courses').insert(newCourse);
-    }
     return newCourse;
   },
 
-  async getSubjects(): Promise<Subject[]> {
-    if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('subjects').select('*');
-      if (!error && data) return data as Subject[];
+  async deleteCourse(id: string): Promise<boolean> {
+    const courses = getStorageData<Course[]>('courses', INITIAL_COURSES);
+    const index = courses.findIndex(c => c.id === id);
+    if (index !== -1) {
+      courses[index].active = false;
+      setStorageData('courses', courses);
     }
-    return getStorageData('subjects', INITIAL_SUBJECTS);
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('courses').update({ active: false }).eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+    return true;
+  },
+
+  async getSubjects(includeInactive = false): Promise<Subject[]> {
+    if (isRealSupabaseConfigured()) {
+      let query = supabase.from('subjects').select('*');
+      if (!includeInactive) {
+        query = query.eq('active', true);
+      }
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as Subject[];
+    }
+    const subjects = getStorageData<Subject[]>('subjects', INITIAL_SUBJECTS);
+    return includeInactive ? subjects : subjects.filter(s => s.active !== false);
   },
 
   async createSubject(subject: Omit<Subject, 'id'>): Promise<Subject> {
-    const newSubj: Subject = { ...subject, id: `subj-${Date.now()}` };
+    const existing = await this.getSubjects(true);
+    if (existing.some(s => s.code.toLowerCase() === subject.code.toLowerCase())) {
+      throw new Error(`Subject code "${subject.code}" already exists.`);
+    }
+
+    const newSubj: Subject = { ...subject, id: `subj-${Date.now()}`, active: true };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('subjects').insert(newSubj);
+      if (error) throw new Error(error.message);
+    }
+
     const subjects = getStorageData<Subject[]>('subjects', INITIAL_SUBJECTS);
     subjects.push(newSubj);
     setStorageData('subjects', subjects);
 
-    if (isRealSupabaseConfigured()) {
-      await supabase.from('subjects').insert(newSubj);
-    }
     return newSubj;
   },
 
-  // TEACHER-SUBJECT ALLOCATION (Requirement 4: Strict Subject Restrictions)
+  async deleteSubject(id: string): Promise<boolean> {
+    const subjects = getStorageData<Subject[]>('subjects', INITIAL_SUBJECTS);
+    const index = subjects.findIndex(s => s.id === id);
+    if (index !== -1) {
+      subjects[index].active = false;
+      setStorageData('subjects', subjects);
+    }
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('subjects').update({ active: false }).eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+    return true;
+  },
+
+  // TEACHER-SUBJECT ALLOCATION
   async getTeacherSubjects(teacherId?: string): Promise<TeacherSubject[]> {
+    if (isRealSupabaseConfigured()) {
+      let query = supabase.from('teacher_subjects').select('*');
+      if (teacherId) query = query.eq('teacher_id', teacherId);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as TeacherSubject[];
+    }
     const all = getStorageData<TeacherSubject[]>('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
     return teacherId ? all.filter(ts => ts.teacher_id === teacherId) : all;
   },
 
   async assignTeacherSubject(teacherId: string, subjectId: string): Promise<TeacherSubject> {
     const all = getStorageData<TeacherSubject[]>('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
-    const subjects = await this.getSubjects();
+    const subjects = await this.getSubjects(true);
     const targetSubject = subjects.find(s => s.id === subjectId);
 
     const existing = all.find(ts => ts.teacher_id === teacherId && ts.subject_id === subjectId);
@@ -262,13 +402,13 @@ export const dbService = {
       created_at: new Date().toISOString(),
     };
 
-    all.push(newAllocation);
-    setStorageData('teacher_subjects', all);
-
     if (isRealSupabaseConfigured()) {
-      await supabase.from('teacher_subjects').insert({ teacher_id: teacherId, subject_id: subjectId });
+      const { error } = await supabase.from('teacher_subjects').insert({ teacher_id: teacherId, subject_id: subjectId });
+      if (error) throw new Error(error.message);
     }
 
+    all.push(newAllocation);
+    setStorageData('teacher_subjects', all);
     return newAllocation;
   },
 
@@ -278,21 +418,28 @@ export const dbService = {
     setStorageData('teacher_subjects', filtered);
 
     if (isRealSupabaseConfigured()) {
-      await supabase.from('teacher_subjects').delete().match({ teacher_id: teacherId, subject_id: subjectId });
+      const { error } = await supabase.from('teacher_subjects').delete().match({ teacher_id: teacherId, subject_id: subjectId });
+      if (error) throw new Error(error.message);
     }
-
     return true;
   },
 
   // STUDENT-SUBJECT ENROLLMENT
   async getStudentSubjects(studentId?: string): Promise<StudentSubject[]> {
+    if (isRealSupabaseConfigured()) {
+      let query = supabase.from('student_subjects').select('*');
+      if (studentId) query = query.eq('student_id', studentId);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as StudentSubject[];
+    }
     const all = getStorageData<StudentSubject[]>('student_subjects', INITIAL_STUDENT_SUBJECTS);
     return studentId ? all.filter(ss => ss.student_id === studentId) : all;
   },
 
   async assignStudentSubject(studentId: string, subjectId: string): Promise<StudentSubject> {
     const all = getStorageData<StudentSubject[]>('student_subjects', INITIAL_STUDENT_SUBJECTS);
-    const subjects = await this.getSubjects();
+    const subjects = await this.getSubjects(true);
     const targetSubject = subjects.find(s => s.id === subjectId);
 
     const existing = all.find(ss => ss.student_id === studentId && ss.subject_id === subjectId);
@@ -306,12 +453,17 @@ export const dbService = {
       subject_code: targetSubject?.code,
     };
 
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('student_subjects').insert({ student_id: studentId, subject_id: subjectId });
+      if (error) throw new Error(error.message);
+    }
+
     all.push(newEnrollment);
     setStorageData('student_subjects', all);
     return newEnrollment;
   },
 
-  // TEACHER-SCOPED HELPER METHODS (Requirement 4 & 5 & 6)
+  // TEACHER-SCOPED HELPER METHODS
   async getTeacherAssignedSubjects(teacherId: string): Promise<Subject[]> {
     const allocations = await this.getTeacherSubjects(teacherId);
     const assignedSubjectIds = new Set(allocations.map(a => a.subject_id));
@@ -332,8 +484,13 @@ export const dbService = {
     return allStudents.filter(st => enrolledStudentIds.has(st.id) || enrolledStudentIds.size === 0);
   },
 
-  // ATTENDANCE WITH ADMIN OVERRIDE & TEACHER RESTRICTION
+  // ATTENDANCE
   async getStudentAttendance(studentId: string): Promise<AttendanceRecord[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('attendance').select('*').eq('student_id', studentId);
+      if (error) throw new Error(error.message);
+      return data as AttendanceRecord[];
+    }
     const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
     return all.filter(a => a.student_id === studentId);
   },
@@ -341,13 +498,18 @@ export const dbService = {
   async getTeacherAttendance(teacherId: string): Promise<AttendanceRecord[]> {
     const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
     const subjectIds = new Set(assignedSubjects.map(s => s.id));
-    const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
+    const all = await this.getAllAttendance();
 
     return all.filter(a => subjectIds.has(a.subject_id) || a.marked_by === teacherId || a.teacher_id === teacherId);
   },
 
   async getAllAttendance(): Promise<AttendanceRecord[]> {
-    return getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('attendance').select('*');
+      if (error) throw new Error(error.message);
+      return data as AttendanceRecord[];
+    }
+    return getStorageData('attendance', INITIAL_ATTENDANCE);
   },
 
   async getStudentAttendanceSummary(studentId: string): Promise<SubjectAttendanceSummary[]> {
@@ -389,6 +551,11 @@ export const dbService = {
   },
 
   async markAttendanceBatch(records: Array<Omit<AttendanceRecord, 'id'>>): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('attendance').upsert(records);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
 
     records.forEach(rec => {
@@ -405,15 +572,18 @@ export const dbService = {
     });
 
     setStorageData('attendance', all);
-
-    if (isRealSupabaseConfigured()) {
-      await supabase.from('attendance').upsert(records);
-    }
     return true;
   },
 
-  // Admin Attendance Override (Requirement 12)
   async adminOverrideAttendance(recordId: string, status: 'present' | 'absent' | 'late', adminId: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase
+        .from('attendance')
+        .update({ status, updated_by: adminId, updated_at: new Date().toISOString() })
+        .eq('id', recordId);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
     const idx = all.findIndex(a => a.id === recordId);
     if (idx !== -1) {
@@ -423,11 +593,16 @@ export const dbService = {
       setStorageData('attendance', all);
       return true;
     }
-    return false;
+    throw new Error('Attendance record not found to apply override.');
   },
 
-  // MARKS & RESULTS WITH ADMIN OVERRIDE & TEACHER RESTRICTION
+  // MARKS & RESULTS
   async getStudentMarks(studentId: string): Promise<MarkRecord[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('marks').select('*').eq('student_id', studentId);
+      if (error) throw new Error(error.message);
+      return data as MarkRecord[];
+    }
     const all = getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
     return all.filter(m => m.student_id === studentId);
   },
@@ -435,54 +610,70 @@ export const dbService = {
   async getTeacherMarks(teacherId: string): Promise<MarkRecord[]> {
     const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
     const subjectIds = new Set(assignedSubjects.map(s => s.id));
-    const all = getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
+    const all = await this.getAllMarks();
 
     return all.filter(m => subjectIds.has(m.subject_id) || m.teacher_id === teacherId);
   },
 
   async getAllMarks(): Promise<MarkRecord[]> {
-    return getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('marks').select('*');
+      if (error) throw new Error(error.message);
+      return data as MarkRecord[];
+    }
+    return getStorageData('marks', INITIAL_MARKS);
   },
 
   async updateMarkRecord(id: string, updates: Partial<MarkRecord>, adminOrTeacherId?: string): Promise<MarkRecord> {
     const all = getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
     const idx = all.findIndex(m => m.id === id);
-    if (idx !== -1) {
-      const total = (updates.internal_marks ?? all[idx].internal_marks) +
-                    (updates.mid_sem_marks ?? all[idx].mid_sem_marks) +
-                    (updates.assignment_marks ?? all[idx].assignment_marks) +
-                    (updates.practical_marks ?? all[idx].practical_marks) +
-                    (updates.end_sem_marks ?? all[idx].end_sem_marks);
+    if (idx === -1) throw new Error('Mark record not found.');
 
-      let grade = 'F';
-      if (total >= 90) grade = 'O';
-      else if (total >= 80) grade = 'A+';
-      else if (total >= 70) grade = 'A';
-      else if (total >= 60) grade = 'B+';
-      else if (total >= 50) grade = 'B';
+    const total = (updates.internal_marks ?? all[idx].internal_marks) +
+                  (updates.mid_sem_marks ?? all[idx].mid_sem_marks) +
+                  (updates.assignment_marks ?? all[idx].assignment_marks) +
+                  (updates.practical_marks ?? all[idx].practical_marks) +
+                  (updates.end_sem_marks ?? all[idx].end_sem_marks);
 
-      all[idx] = {
-        ...all[idx],
-        ...updates,
-        total_marks: total,
-        grade,
-        updated_by: adminOrTeacherId,
-      };
-      setStorageData('marks', all);
-      return all[idx];
+    let grade = 'F';
+    if (total >= 90) grade = 'O';
+    else if (total >= 80) grade = 'A+';
+    else if (total >= 70) grade = 'A';
+    else if (total >= 60) grade = 'B+';
+    else if (total >= 50) grade = 'B';
+
+    const updatedRecord: MarkRecord = {
+      ...all[idx],
+      ...updates,
+      total_marks: total,
+      grade,
+      updated_by: adminOrTeacherId,
+    };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('marks').update(updatedRecord).eq('id', id);
+      if (error) throw new Error(error.message);
     }
-    throw new Error('Mark record not found');
+
+    all[idx] = updatedRecord;
+    setStorageData('marks', all);
+    return updatedRecord;
   },
 
-  // ASSIGNMENTS WITH TEACHER RESTRICTION
+  // ASSIGNMENTS
   async getAssignments(): Promise<Assignment[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('assignments').select('*').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data as Assignment[];
+    }
     return getStorageData('assignments', INITIAL_ASSIGNMENTS);
   },
 
   async getTeacherAssignments(teacherId: string): Promise<Assignment[]> {
     const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
     const subjectIds = new Set(assignedSubjects.map(s => s.id));
-    const all = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
+    const all = await this.getAssignments();
 
     return all.filter(a => subjectIds.has(a.subject_id) || a.teacher_id === teacherId);
   },
@@ -494,13 +685,38 @@ export const dbService = {
       created_at: new Date().toISOString(),
       submission_status: 'pending',
     };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('assignments').insert(newAsgn);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
     all.unshift(newAsgn);
     setStorageData('assignments', all);
     return newAsgn;
   },
 
+  async deleteAssignment(id: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('assignments').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
+    const all = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
+    const filtered = all.filter(a => a.id !== id);
+    setStorageData('assignments', filtered);
+    return true;
+  },
+
   async getSubmissions(assignmentId?: string): Promise<AssignmentSubmission[]> {
+    if (isRealSupabaseConfigured()) {
+      let query = supabase.from('assignment_submissions').select('*');
+      if (assignmentId) query = query.eq('assignment_id', assignmentId);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as AssignmentSubmission[];
+    }
     const all = getStorageData<AssignmentSubmission[]>('submissions', INITIAL_SUBMISSIONS);
     return assignmentId ? all.filter(s => s.assignment_id === assignmentId) : all;
   },
@@ -516,6 +732,11 @@ export const dbService = {
       status: 'submitted',
     };
 
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('assignment_submissions').upsert(newSub);
+      if (error) throw new Error(error.message);
+    }
+
     if (existingIdx !== -1) {
       all[existingIdx] = newSub;
     } else {
@@ -523,17 +744,18 @@ export const dbService = {
     }
     setStorageData('submissions', all);
 
-    const assignments = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
-    const asgnIdx = assignments.findIndex(a => a.id === submission.assignment_id);
-    if (asgnIdx !== -1) {
-      assignments[asgnIdx].submission_status = 'submitted';
-      setStorageData('assignments', assignments);
-    }
-
     return newSub;
   },
 
   async gradeSubmission(submissionId: string, grade: number, remarks: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase
+        .from('assignment_submissions')
+        .update({ grade, remarks, status: 'graded' })
+        .eq('id', submissionId);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<AssignmentSubmission[]>('submissions', INITIAL_SUBMISSIONS);
     const idx = all.findIndex(s => s.id === submissionId);
     if (idx !== -1) {
@@ -543,37 +765,70 @@ export const dbService = {
       setStorageData('submissions', all);
       return true;
     }
-    return false;
+    throw new Error('Submission record not found to grade.');
   },
 
   // EXAMS
   async getExams(): Promise<Exam[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('exams').select('*');
+      if (error) throw new Error(error.message);
+      return data as Exam[];
+    }
     return getStorageData('exams', INITIAL_EXAMS);
   },
 
   async getTeacherExams(teacherId: string): Promise<Exam[]> {
     const assignedSubjects = await this.getTeacherAssignedSubjects(teacherId);
     const subjectIds = new Set(assignedSubjects.map(s => s.id));
-    const all = getStorageData<Exam[]>('exams', INITIAL_EXAMS);
+    const all = await this.getExams();
 
     return all.filter(e => subjectIds.has(e.subject_id) || e.teacher_id === teacherId);
   },
 
   async createExam(exam: Omit<Exam, 'id'>): Promise<Exam> {
     const newExam: Exam = { ...exam, id: `exam-${Date.now()}` };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('exams').insert(newExam);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<Exam[]>('exams', INITIAL_EXAMS);
     all.push(newExam);
     setStorageData('exams', all);
     return newExam;
   },
 
+  async deleteExam(id: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('exams').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
+    const all = getStorageData<Exam[]>('exams', INITIAL_EXAMS);
+    const filtered = all.filter(e => e.id !== id);
+    setStorageData('exams', filtered);
+    return true;
+  },
+
   // TIMETABLE
   async getTimetable(): Promise<TimetableSlot[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('timetable').select('*');
+      if (error) throw new Error(error.message);
+      return data as TimetableSlot[];
+    }
     return getStorageData('timetable', INITIAL_TIMETABLE);
   },
 
   // NOTICES
   async getNotices(): Promise<Notice[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('notices').select('*').order('created_at', { ascending: false });
+      if (error) throw new Error(error.message);
+      return data as Notice[];
+    }
     return getStorageData('notices', INITIAL_NOTICES);
   },
 
@@ -585,6 +840,12 @@ export const dbService = {
       pinned: notice.pinned || false,
       archived: notice.archived || false,
     };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('notices').insert(newNotice);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<Notice[]>('notices', INITIAL_NOTICES);
     all.unshift(newNotice);
     setStorageData('notices', all);
@@ -592,6 +853,11 @@ export const dbService = {
   },
 
   async deleteNotice(id: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('notices').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<Notice[]>('notices', INITIAL_NOTICES);
     const filtered = all.filter(n => n.id !== id);
     setStorageData('notices', filtered);
@@ -600,19 +866,49 @@ export const dbService = {
 
   // EVENTS
   async getEvents(): Promise<CollegeEvent[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('events').select('*');
+      if (error) throw new Error(error.message);
+      return data as CollegeEvent[];
+    }
     return getStorageData('events', INITIAL_EVENTS);
   },
 
   async createEvent(event: Omit<CollegeEvent, 'id'>): Promise<CollegeEvent> {
     const newEvt: CollegeEvent = { ...event, id: `evt-${Date.now()}` };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('events').insert(newEvt);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<CollegeEvent[]>('events', INITIAL_EVENTS);
     all.push(newEvt);
     setStorageData('events', all);
     return newEvt;
   },
 
-  // CERTIFICATES
+  async deleteEvent(id: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('events').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
+    const all = getStorageData<CollegeEvent[]>('events', INITIAL_EVENTS);
+    const filtered = all.filter(e => e.id !== id);
+    setStorageData('events', filtered);
+    return true;
+  },
+
+  // CERTIFICATES & VERIFICATION
   async getCertificates(studentId?: string): Promise<Certificate[]> {
+    if (isRealSupabaseConfigured()) {
+      let query = supabase.from('certificates').select('*').order('created_at', { ascending: false });
+      if (studentId) query = query.eq('student_id', studentId);
+      const { data, error } = await query;
+      if (error) throw new Error(error.message);
+      return data as Certificate[];
+    }
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
     return studentId ? all.filter(c => c.student_id === studentId) : all;
   },
@@ -623,32 +919,75 @@ export const dbService = {
       id: `cert-${Date.now()}`,
       status: 'pending',
     };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('certificates').insert(newCert);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
     all.unshift(newCert);
     setStorageData('certificates', all);
     return newCert;
   },
 
-  async updateCertificateStatus(id: string, status: 'verified' | 'rejected', remarks?: string): Promise<boolean> {
+  async updateCertificateStatus(
+    id: string,
+    status: 'verified' | 'rejected',
+    remarks?: string,
+    adminId?: string
+  ): Promise<boolean> {
+    const updatePayload = {
+      status,
+      remarks: remarks || '',
+      verified_by: adminId || 'admin-user',
+      verified_at: new Date().toISOString(),
+    };
+
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('certificates').update(updatePayload).eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
     const idx = all.findIndex(c => c.id === id);
     if (idx !== -1) {
-      all[idx].status = status;
-      if (remarks) all[idx].remarks = remarks;
+      all[idx] = { ...all[idx], ...updatePayload };
       setStorageData('certificates', all);
       return true;
     }
-    return false;
+    throw new Error('Certificate record not found.');
+  },
+
+  async deleteCertificate(id: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('certificates').delete().eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
+    const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
+    const filtered = all.filter(c => c.id !== id);
+    setStorageData('certificates', filtered);
+    return true;
   },
 
   // RESUME
   async getStudentResume(studentId: string): Promise<ResumeData> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('resumes').select('*').eq('student_id', studentId).maybeSingle();
+      if (!error && data) return data as ResumeData;
+    }
     const resumes = getStorageData<ResumeData[]>('resumes', [INITIAL_RESUME]);
     const found = resumes.find(r => r.student_id === studentId);
     return found || { ...INITIAL_RESUME, student_id: studentId };
   },
 
   async saveStudentResume(resume: ResumeData): Promise<ResumeData> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('resumes').upsert(resume);
+      if (error) throw new Error(error.message);
+    }
+
     const resumes = getStorageData<ResumeData[]>('resumes', [INITIAL_RESUME]);
     const idx = resumes.findIndex(r => r.student_id === resume.student_id);
     if (idx !== -1) {
@@ -662,11 +1001,21 @@ export const dbService = {
 
   // NOTIFICATIONS
   async getNotifications(userId: string): Promise<NotificationItem[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId);
+      if (error) throw new Error(error.message);
+      return data as NotificationItem[];
+    }
     const all = getStorageData<NotificationItem[]>('notifications', INITIAL_NOTIFICATIONS);
     return all.filter(n => n.user_id === userId);
   },
 
   async markNotificationRead(id: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<NotificationItem[]>('notifications', INITIAL_NOTIFICATIONS);
     const idx = all.findIndex(n => n.id === id);
     if (idx !== -1) {
@@ -678,6 +1027,11 @@ export const dbService = {
   },
 
   async markAllNotificationsRead(userId: string): Promise<boolean> {
+    if (isRealSupabaseConfigured()) {
+      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
+      if (error) throw new Error(error.message);
+    }
+
     const all = getStorageData<NotificationItem[]>('notifications', INITIAL_NOTIFICATIONS);
     all.forEach(n => {
       if (n.user_id === userId) n.is_read = true;

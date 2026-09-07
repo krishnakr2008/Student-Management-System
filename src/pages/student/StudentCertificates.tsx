@@ -5,7 +5,7 @@ import { dbService } from '../../services/dbService';
 import { Certificate } from '../../types';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
-import { FileCheck, Plus, ExternalLink, ShieldCheck, ShieldAlert, Upload } from 'lucide-react';
+import { Plus, ExternalLink, ShieldCheck, ShieldAlert } from 'lucide-react';
 
 export const StudentCertificates: React.FC = () => {
   const { student } = useAuth();
@@ -13,6 +13,9 @@ export const StudentCertificates: React.FC = () => {
 
   const [certificates, setCertificates] = useState<Certificate[]>([]);
   const [isAddOpen, setIsAddOpen] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [loading, setLoading] = useState(true);
+
   const [formData, setFormData] = useState({
     name: '',
     organization: '',
@@ -26,8 +29,15 @@ export const StudentCertificates: React.FC = () => {
 
   const loadCertificates = async () => {
     if (!student) return;
-    const data = await dbService.getCertificates(student.id);
-    setCertificates(data);
+    setLoading(true);
+    try {
+      const data = await dbService.getCertificates(student.id);
+      setCertificates(data);
+    } catch (err: any) {
+      showToast('Error Loading Certificates', err.message || 'Failed to fetch certificates.', 'error');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
@@ -40,7 +50,7 @@ export const StudentCertificates: React.FC = () => {
       const reader = new FileReader();
       reader.onloadend = () => {
         setFormData(prev => ({ ...prev, file_url: reader.result as string }));
-        showToast('Document Uploaded', 'Certificate image attached successfully.', 'success');
+        showToast('Document Attached', 'Certificate file attached successfully.', 'success');
       };
       reader.readAsDataURL(file);
     }
@@ -49,10 +59,11 @@ export const StudentCertificates: React.FC = () => {
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!student || !formData.name || !formData.organization) {
-      showToast('Error', 'Please fill in required certificate details.', 'error');
+      showToast('Validation Error', 'Certificate name and issuing organization are required.', 'error');
       return;
     }
 
+    setIsSubmitting(true);
     try {
       await dbService.uploadCertificate({
         student_id: student.id,
@@ -78,9 +89,11 @@ export const StudentCertificates: React.FC = () => {
         description: '',
         file_url: '',
       });
-      showToast('Certificate Uploaded', 'Your certificate has been submitted for admin verification.', 'success');
-    } catch (err) {
-      showToast('Error', 'Failed to upload certificate.', 'error');
+      showToast('Certificate Uploaded', 'Submitted for HOD verification. Status is currently PENDING.', 'success');
+    } catch (err: any) {
+      showToast('Database Error', err.message || 'Failed to submit certificate.', 'error');
+    } finally {
+      setIsSubmitting(false);
     }
   };
 
@@ -91,10 +104,10 @@ export const StudentCertificates: React.FC = () => {
       <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-            Certificate Management
+            Certificate & Credential Portfolio
           </h1>
           <p className="text-xs text-slate-500 dark:text-slate-400 mt-1">
-            Upload external certifications, track institutional verification status, and manage portfolio credentials
+            Upload external certifications, track institutional HOD verification status, and manage resume credentials
           </p>
         </div>
 
@@ -108,63 +121,73 @@ export const StudentCertificates: React.FC = () => {
       </div>
 
       {/* Certificates Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-        {certificates.map(cert => (
-          <div
-            key={cert.id}
-            className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4 flex flex-col justify-between"
-          >
-            <div className="space-y-3">
-              <div className="flex items-center justify-between">
-                <Badge variant="info">{cert.category}</Badge>
-                <Badge
-                  variant={cert.status === 'verified' ? 'verified' : cert.status === 'rejected' ? 'rejected' : 'pending'}
-                >
-                  {cert.status === 'verified' ? '✓ Verified' : cert.status === 'rejected' ? '✕ Rejected' : '⏳ Pending'}
-                </Badge>
-              </div>
-
-              <div>
-                <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{cert.name}</h3>
-                <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{cert.organization}</p>
-              </div>
-
-              {cert.description && <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{cert.description}</p>}
-
-              {cert.remarks && (
-                <div
-                  className={`p-3 rounded-xl text-xs space-y-1 ${
-                    cert.status === 'verified'
-                      ? 'bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 border border-emerald-500/20'
-                      : 'bg-rose-500/10 text-rose-900 dark:text-rose-200 border border-rose-500/20'
-                  }`}
-                >
-                  <span className="font-bold flex items-center gap-1">
-                    {cert.status === 'verified' ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
-                    Admin Verification Note:
-                  </span>
-                  <p>{cert.remarks}</p>
+      {loading ? (
+        <div className="p-8 text-center text-xs font-bold text-slate-500">
+          Loading certificate portfolio...
+        </div>
+      ) : certificates.length === 0 ? (
+        <div className="p-8 text-center text-xs text-slate-500 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 rounded-2xl">
+          No certificates uploaded yet. Click "Add New Certificate" to submit credentials for verification.
+        </div>
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {certificates.map(cert => (
+            <div
+              key={cert.id}
+              className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4 flex flex-col justify-between"
+            >
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <Badge variant="info">{cert.category}</Badge>
+                  <Badge
+                    variant={cert.status === 'verified' ? 'verified' : cert.status === 'rejected' ? 'rejected' : 'pending'}
+                  >
+                    {cert.status === 'verified' ? '✓ Verified' : cert.status === 'rejected' ? '✕ Rejected' : '⏳ Pending Audit'}
+                  </Badge>
                 </div>
-              )}
-            </div>
 
-            <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
-              <span className="text-slate-400">Issued: {cert.issue_date}</span>
-              {cert.credential_url && (
-                <a
-                  href={cert.credential_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
-                >
-                  <span>Verify Link</span>
-                  <ExternalLink className="w-3 h-3" />
-                </a>
-              )}
+                <div>
+                  <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">{cert.name}</h3>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">{cert.organization}</p>
+                </div>
+
+                {cert.description && <p className="text-xs text-slate-600 dark:text-slate-300 line-clamp-2">{cert.description}</p>}
+
+                {cert.remarks && (
+                  <div
+                    className={`p-3 rounded-xl text-xs space-y-1 ${
+                      cert.status === 'verified'
+                        ? 'bg-emerald-500/10 text-emerald-900 dark:text-emerald-200 border border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-900 dark:text-rose-200 border border-rose-500/20'
+                    }`}
+                  >
+                    <span className="font-bold flex items-center gap-1">
+                      {cert.status === 'verified' ? <ShieldCheck className="w-3.5 h-3.5" /> : <ShieldAlert className="w-3.5 h-3.5" />}
+                      HOD Verification Note:
+                    </span>
+                    <p>{cert.remarks}</p>
+                  </div>
+                )}
+              </div>
+
+              <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
+                <span className="text-slate-400">Issued: {cert.issue_date}</span>
+                {cert.credential_url && (
+                  <a
+                    href={cert.credential_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                  >
+                    <span>Verify Link</span>
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                )}
+              </div>
             </div>
-          </div>
-        ))}
-      </div>
+          ))}
+        </div>
+      )}
 
       {/* Add Certificate Modal */}
       {isAddOpen && (
@@ -230,7 +253,7 @@ export const StudentCertificates: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Credential URL</label>
+                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Credential Verification Link</label>
                 <input
                   type="url"
                   value={formData.credential_url}
@@ -255,15 +278,17 @@ export const StudentCertificates: React.FC = () => {
               <button
                 type="button"
                 onClick={() => setIsAddOpen(false)}
+                disabled={isSubmitting}
                 className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:bg-slate-100"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-500 rounded-xl shadow-xs"
+                disabled={isSubmitting}
+                className="px-5 py-2 text-xs font-bold text-white bg-brand-600 hover:bg-brand-500 rounded-xl shadow-xs disabled:opacity-50 flex items-center gap-2"
               >
-                Submit Certificate
+                {isSubmitting ? 'Uploading...' : 'Submit Certificate'}
               </button>
             </div>
           </form>

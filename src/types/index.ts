@@ -36,6 +36,7 @@ export interface Student {
   guardian_name?: string;
   guardian_phone?: string;
   guardian_relation?: string;
+  active?: boolean;
   profile?: UserProfile;
 }
 
@@ -45,6 +46,7 @@ export interface Teacher {
   teacher_id_code: string;
   department: string;
   designation: string;
+  active?: boolean;
   profile?: UserProfile;
   assigned_subjects?: Subject[];
 }
@@ -70,6 +72,7 @@ export interface Subject {
   semester: number;
   teacher_id?: string;
   teacher_name?: string;
+  active?: boolean;
 }
 
 export interface TeacherSubject {
@@ -242,6 +245,8 @@ export interface Certificate {
   file_url?: string;
   status: 'pending' | 'verified' | 'rejected';
   remarks?: string;
+  verified_by?: string;
+  verified_at?: string;
 }
 
 export interface ResumeData {

@@ -40,6 +40,7 @@ CREATE TABLE IF NOT EXISTS public.teachers (
     teacher_id_code TEXT UNIQUE NOT NULL,
     department TEXT NOT NULL,
     designation TEXT NOT NULL,
+    active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -58,6 +59,7 @@ CREATE TABLE IF NOT EXISTS public.students (
     guardian_name TEXT,
     guardian_phone TEXT,
     guardian_relation TEXT,
+    active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -70,6 +72,7 @@ CREATE TABLE IF NOT EXISTS public.subjects (
     course_id UUID REFERENCES public.courses(id) ON DELETE CASCADE,
     semester INT NOT NULL,
     teacher_id UUID REFERENCES public.teachers(id) ON DELETE SET NULL,
+    active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -213,7 +216,7 @@ CREATE TABLE IF NOT EXISTS public.events (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
--- 16. CERTIFICATES
+-- 16. CERTIFICATES WITH VERIFICATION AUDIT FIELDS
 CREATE TABLE IF NOT EXISTS public.certificates (
     id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
     student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
@@ -227,6 +230,8 @@ CREATE TABLE IF NOT EXISTS public.certificates (
     file_url TEXT,
     status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'verified', 'rejected')),
     remarks TEXT,
+    verified_by UUID REFERENCES public.profiles(id),
+    verified_at TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
@@ -314,6 +319,19 @@ CREATE POLICY "Admin full access courses" ON public.courses FOR ALL USING (true)
 CREATE POLICY "Admin full access subjects" ON public.subjects FOR ALL USING (true);
 CREATE POLICY "Admin full access teacher_subjects" ON public.teacher_subjects FOR ALL USING (true);
 CREATE POLICY "Admin full access student_subjects" ON public.student_subjects FOR ALL USING (true);
+
+-- CERTIFICATE VERIFICATION RLS (Students upload own, Admin manages & verifies)
+CREATE POLICY "Student insert own certificates" ON public.certificates FOR INSERT WITH CHECK (
+    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR public.is_admin()
+);
+
+CREATE POLICY "Read certificates" ON public.certificates FOR SELECT USING (
+    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR public.is_admin()
+);
+
+CREATE POLICY "Admin verify certificates" ON public.certificates FOR UPDATE USING (
+    public.is_admin()
+);
 
 -- TEACHER SUBJECT SCOPED POLICIES
 CREATE POLICY "Teacher read attendance" ON public.attendance FOR SELECT USING (
