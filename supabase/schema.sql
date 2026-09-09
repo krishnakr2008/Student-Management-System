@@ -10,7 +10,7 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     id UUID PRIMARY KEY REFERENCES auth.users(id) ON DELETE CASCADE,
     full_name TEXT NOT NULL,
     email TEXT UNIQUE NOT NULL,
-    role TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'admin')),
+    role TEXT NOT NULL CHECK (role IN ('student', 'teacher', 'hod', 'admin')),
     avatar_url TEXT,
     phone TEXT,
     gender TEXT,
@@ -280,6 +280,24 @@ CREATE TABLE IF NOT EXISTS public.notifications (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 19. FEES & BILLING
+CREATE TABLE IF NOT EXISTS public.fees (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    semester INT NOT NULL DEFAULT 1,
+    academic_year TEXT NOT NULL DEFAULT '2025-2026',
+    tuition_fee NUMERIC(10,2) NOT NULL DEFAULT 45000,
+    exam_fee NUMERIC(10,2) NOT NULL DEFAULT 3500,
+    library_fee NUMERIC(10,2) NOT NULL DEFAULT 1500,
+    total_amount NUMERIC(10,2) NOT NULL DEFAULT 50000,
+    paid_amount NUMERIC(10,2) NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('paid', 'pending', 'partial', 'overdue')),
+    due_date DATE NOT NULL,
+    receipt_no TEXT UNIQUE,
+    paid_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- ====================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================
@@ -301,6 +319,7 @@ ALTER TABLE public.events ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.resumes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.fees ENABLE ROW LEVEL SECURITY;
 
 -- Helper Function: Check Admin
 CREATE OR REPLACE FUNCTION public.is_admin()

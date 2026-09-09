@@ -147,6 +147,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const switchRole = async (newRole: UserRole) => {
     let email = 'student1@college.com';
     if (newRole === 'teacher') email = 'teacher1@college.com';
+    if (newRole === 'hod') email = 'hod.cs@college.com';
     if (newRole === 'admin') email = 'admin@college.com';
 
     await loadUserByEmailAndRole(email, newRole);

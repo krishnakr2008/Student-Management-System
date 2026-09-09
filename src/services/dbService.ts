@@ -18,6 +18,8 @@ import {
   INITIAL_CERTIFICATES,
   INITIAL_RESUME,
   INITIAL_NOTIFICATIONS,
+  INITIAL_FEES,
+  INITIAL_HODS,
 } from './seedData';
 import {
   UserProfile,
@@ -39,6 +41,8 @@ import {
   Certificate,
   ResumeData,
   NotificationItem,
+  FeeRecord,
+  HODInfo,
 } from '../types';
 
 // Storage Helper
@@ -80,6 +84,8 @@ export const initializeLocalStorage = () => {
   if (!localStorage.getItem('student_portal_certificates')) setStorageData('certificates', INITIAL_CERTIFICATES);
   if (!localStorage.getItem('student_portal_resumes')) setStorageData('resumes', [INITIAL_RESUME]);
   if (!localStorage.getItem('student_portal_notifications')) setStorageData('notifications', INITIAL_NOTIFICATIONS);
+  if (!localStorage.getItem('student_portal_fees')) setStorageData('fees', INITIAL_FEES);
+  if (!localStorage.getItem('student_portal_hods')) setStorageData('hods', INITIAL_HODS);
 };
 
 initializeLocalStorage();
@@ -1267,5 +1273,70 @@ export const dbService = {
     });
     setStorageData('notifications', all);
     return true;
+  },
+
+  // HOD MODULE
+  async getHODs(): Promise<HODInfo[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('hods').select('*, profile:profiles(*)');
+      if (error) return getStorageData('hods', INITIAL_HODS);
+      return data as HODInfo[];
+    }
+    return getStorageData('hods', INITIAL_HODS);
+  },
+
+  async getDepartmentTeachers(department: string): Promise<Teacher[]> {
+    const allTeachers = await this.getTeachers();
+    return allTeachers.filter(t => t.department.toLowerCase() === department.toLowerCase());
+  },
+
+  async getDepartmentStudents(department: string): Promise<Student[]> {
+    const allStudents = await this.getStudents();
+    return allStudents.filter(s => s.department.toLowerCase() === department.toLowerCase());
+  },
+
+  // FEES MODULE
+  async getFees(): Promise<FeeRecord[]> {
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('fees').select('*');
+      if (error) return getStorageData('fees', INITIAL_FEES);
+      return data as FeeRecord[];
+    }
+    return getStorageData('fees', INITIAL_FEES);
+  },
+
+  async getStudentFees(studentId: string): Promise<FeeRecord[]> {
+    const all = await this.getFees();
+    return all.filter(f => f.student_id === studentId);
+  },
+
+  async payFee(feeId: string, amountPaid: number): Promise<FeeRecord> {
+    const all = getStorageData<FeeRecord[]>('fees', INITIAL_FEES);
+    const idx = all.findIndex(f => f.id === feeId);
+    if (idx === -1) throw new Error('Fee record not found.');
+
+    const newPaid = all[idx].paid_amount + amountPaid;
+    let status: 'paid' | 'partial' | 'pending' = 'partial';
+    if (newPaid >= all[idx].total_amount) status = 'paid';
+
+    all[idx] = {
+      ...all[idx],
+      paid_amount: Math.min(newPaid, all[idx].total_amount),
+      status,
+      paid_at: new Date().toISOString(),
+      receipt_no: all[idx].receipt_no || `REC-${Date.now().toString().substr(-6)}`,
+    };
+
+    if (isRealSupabaseConfigured()) {
+      await supabase.from('fees').update({
+        paid_amount: all[idx].paid_amount,
+        status: all[idx].status,
+        paid_at: all[idx].paid_at,
+        receipt_no: all[idx].receipt_no,
+      }).eq('id', feeId);
+    }
+
+    setStorageData('fees', all);
+    return all[idx];
   }
 };

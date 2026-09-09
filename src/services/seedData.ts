@@ -17,6 +17,8 @@ import {
   Certificate,
   ResumeData,
   NotificationItem,
+  FeeRecord,
+  HODInfo,
 } from '../types';
 
 export const INITIAL_PROFILES: UserProfile[] = [
@@ -86,10 +88,24 @@ export const INITIAL_PROFILES: UserProfile[] = [
     created_at: '2021-06-10T00:00:00Z',
   },
 
-  // Admin / HOD Account (Requirement 19: admin@college.com)
+  // HOD Account (Head of Department - Computer Science)
+  {
+    id: 'user-hod-1',
+    full_name: 'Dr. Robert Carter (HOD - Computer Science)',
+    email: 'hod.cs@college.com',
+    role: 'hod',
+    avatar_url: 'https://images.unsplash.com/photo-1560250097-0b93528c311a?w=150',
+    phone: '+1 555-0888',
+    gender: 'Male',
+    dob: '1978-03-15',
+    address: 'CS Department Block B, Room 204',
+    created_at: '2020-01-01T00:00:00Z',
+  },
+
+  // Admin Account (Requirement 19: admin@college.com)
   {
     id: 'user-admin-1',
-    full_name: 'Dr. Eleanor Vance (HOD / Admin)',
+    full_name: 'Dr. Eleanor Vance (Institutional Admin)',
     email: 'admin@college.com',
     role: 'admin',
     avatar_url: 'https://images.unsplash.com/photo-1580489944761-15a19d654956?w=150',
@@ -679,5 +695,68 @@ export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
     type: 'assignment',
     is_read: false,
     created_at: '2026-09-06T08:00:00Z',
+  },
+];
+
+export const INITIAL_HODS: HODInfo[] = [
+  {
+    id: 'hod-1',
+    profile_id: 'user-hod-1',
+    hod_id_code: 'HOD-CS-001',
+    department: 'Computer Science',
+    profile: INITIAL_PROFILES.find(p => p.id === 'user-hod-1'),
+  },
+];
+
+export const INITIAL_FEES: FeeRecord[] = [
+  {
+    id: 'fee-1',
+    student_id: 'student-1',
+    student_name: 'Alex Johnson (Student 1)',
+    roll_number: '23CS101',
+    department: 'Computer Science',
+    semester: 5,
+    academic_year: '2025-2026',
+    tuition_fee: 45000,
+    exam_fee: 3500,
+    library_fee: 1500,
+    total_amount: 50000,
+    paid_amount: 50000,
+    status: 'paid',
+    due_date: '2026-08-30',
+    receipt_no: 'REC-2026-08912',
+    paid_at: '2026-08-15T10:30:00Z',
+  },
+  {
+    id: 'fee-2',
+    student_id: 'student-2',
+    student_name: 'Priya Sharma',
+    roll_number: '23CS102',
+    department: 'Computer Science',
+    semester: 5,
+    academic_year: '2025-2026',
+    tuition_fee: 45000,
+    exam_fee: 3500,
+    library_fee: 1500,
+    total_amount: 50000,
+    paid_amount: 25000,
+    status: 'partial',
+    due_date: '2026-09-30',
+  },
+  {
+    id: 'fee-3',
+    student_id: 'student-3',
+    student_name: 'Rahul Patel',
+    roll_number: '23CS103',
+    department: 'Computer Science',
+    semester: 5,
+    academic_year: '2025-2026',
+    tuition_fee: 45000,
+    exam_fee: 3500,
+    library_fee: 1500,
+    total_amount: 50000,
+    paid_amount: 0,
+    status: 'pending',
+    due_date: '2026-09-25',
   },
 ];

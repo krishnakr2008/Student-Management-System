@@ -1,4 +1,4 @@
-export type UserRole = 'student' | 'teacher' | 'admin';
+export type UserRole = 'student' | 'teacher' | 'hod' | 'admin';
 
 export type AssessmentType =
   | 'Assignment'
@@ -349,4 +349,32 @@ export interface NotificationItem {
   type: 'assignment' | 'notice' | 'exam' | 'result' | 'attendance' | 'certificate' | 'event' | 'info';
   is_read: boolean;
   created_at: string;
+}
+
+export interface FeeRecord {
+  id: string;
+  student_id: string;
+  student_name?: string;
+  roll_number?: string;
+  department?: string;
+  semester: number;
+  academic_year: string;
+  tuition_fee: number;
+  exam_fee: number;
+  library_fee: number;
+  total_amount: number;
+  paid_amount: number;
+  status: 'paid' | 'pending' | 'partial' | 'overdue';
+  due_date: string;
+  receipt_no?: string;
+  paid_at?: string;
+  created_at?: string;
+}
+
+export interface HODInfo {
+  id: string;
+  profile_id: string;
+  hod_id_code: string;
+  department: string;
+  profile?: UserProfile;
 }

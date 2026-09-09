@@ -1,0 +1,159 @@
+import React, { useState } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
+import { useToast } from '../../contexts/ToastContext';
+import { GraduationCap, Eye, EyeOff, Lock, ArrowRight, BookOpen } from 'lucide-react';
+
+export const StudentLogin: React.FC = () => {
+  const navigate = useNavigate();
+  const { login } = useAuth();
+  const { showToast } = useToast();
+
+  const [identifier, setIdentifier] = useState('student1@college.com');
+  const [password, setPassword] = useState('password123');
+  const [showPassword, setShowPassword] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!identifier || !password) {
+      showToast('Validation Error', 'Please enter your Roll Number / Email and Password.', 'error');
+      return;
+    }
+
+    setIsSubmitting(true);
+    let loginEmail = identifier;
+    if (!identifier.includes('@')) {
+      loginEmail = 'student1@college.com';
+    }
+
+    const success = await login(loginEmail, 'student');
+    setIsSubmitting(false);
+
+    if (success) {
+      showToast('Student Login Successful', 'Welcome to your Student Portal!', 'success');
+      navigate('/student/dashboard');
+    } else {
+      showToast('Authentication Failed', 'Invalid student credentials.', 'error');
+    }
+  };
+
+  return (
+    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4 selection:bg-brand-500 selection:text-white">
+      <div className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-3xl p-8 shadow-2xl space-y-6">
+        {/* Student Branding */}
+        <div className="text-center space-y-2">
+          <div
+            className="inline-flex p-3 bg-brand-600 rounded-2xl text-white shadow-lg shadow-brand-600/30 cursor-pointer"
+            onClick={() => navigate('/')}
+          >
+            <GraduationCap className="w-8 h-8" />
+          </div>
+          <h2 className="text-2xl font-black text-white tracking-tight">Student Portal Login</h2>
+          <p className="text-xs text-slate-400">Access your grades, attendance, timetable & career assistant</p>
+        </div>
+
+        {/* Portal Switcher Banner */}
+        <div className="flex items-center justify-between p-3 bg-slate-950/80 border border-slate-800 rounded-2xl text-xs">
+          <span className="text-slate-400 font-semibold">Not a student?</span>
+          <div className="flex gap-2 font-bold">
+            <Link to="/login/teacher" className="text-emerald-400 hover:underline">Teacher</Link>
+            <span className="text-slate-600">•</span>
+            <Link to="/login/hod" className="text-indigo-400 hover:underline">HOD</Link>
+            <span className="text-slate-600">•</span>
+            <Link to="/login/admin" className="text-purple-400 hover:underline">Admin</Link>
+          </div>
+        </div>
+
+        {/* Form */}
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <div className="space-y-1.5">
+            <label className="text-xs font-semibold text-slate-300">Roll Number or Email Address</label>
+            <div className="relative">
+              <BookOpen className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type="text"
+                required
+                value={identifier}
+                onChange={e => setIdentifier(e.target.value)}
+                placeholder="23CS101 or student1@college.com"
+                className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden transition-colors"
+              />
+            </div>
+          </div>
+
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-xs font-semibold text-slate-300">Password</label>
+              <Link to="/forgot-password" className="text-xs font-semibold text-brand-400 hover:underline">
+                Forgot?
+              </Link>
+            </div>
+            <div className="relative">
+              <Lock className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+              <input
+                type={showPassword ? 'text' : 'password'}
+                required
+                value={password}
+                onChange={e => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="w-full pl-10 pr-10 py-2.5 bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden transition-colors"
+              />
+              <button
+                type="button"
+                onClick={() => setShowPassword(!showPassword)}
+                className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300"
+              >
+                {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+              </button>
+            </div>
+          </div>
+
+          <button
+            type="submit"
+            disabled={isSubmitting}
+            className="w-full py-3 text-xs font-bold text-white bg-brand-600 hover:bg-brand-500 rounded-xl shadow-lg shadow-brand-600/30 transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+          >
+            {isSubmitting ? (
+              <span>Logging in...</span>
+            ) : (
+              <>
+                <span>Sign In to Student Portal</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            )}
+          </button>
+        </form>
+
+        {/* Demo Quick Fill */}
+        <div className="pt-3 border-t border-slate-800 text-center space-y-2">
+          <span className="text-[11px] font-semibold text-slate-400 uppercase tracking-wider block">
+            Demo Student Test Accounts
+          </span>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <button
+              onClick={() => { setIdentifier('student1@college.com'); setPassword('password123'); }}
+              className="p-2.5 bg-slate-950 hover:bg-brand-950/40 text-brand-400 border border-slate-800 rounded-xl text-left font-semibold"
+            >
+              <span className="block font-bold">Alex Johnson</span>
+              <span className="text-[10px] text-slate-400">Roll: 23CS101</span>
+            </button>
+            <button
+              onClick={() => { setIdentifier('priya.sharma@college.com'); setPassword('password123'); }}
+              className="p-2.5 bg-slate-950 hover:bg-brand-950/40 text-brand-400 border border-slate-800 rounded-xl text-left font-semibold"
+            >
+              <span className="block font-bold">Priya Sharma</span>
+              <span className="text-[10px] text-slate-400">Roll: 23CS102</span>
+            </button>
+          </div>
+        </div>
+
+        <div className="text-center text-xs text-slate-400">
+          <Link to="/login" className="text-slate-400 font-bold hover:underline">
+            ← Back to All Login Portals
+          </Link>
+        </div>
+      </div>
+    </div>
+  );
+};

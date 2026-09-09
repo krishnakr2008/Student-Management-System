@@ -34,6 +34,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     await switchRole(newRole);
     if (newRole === 'student') navigate('/student/dashboard');
     else if (newRole === 'teacher') navigate('/teacher/dashboard');
+    else if (newRole === 'hod') navigate('/hod/dashboard');
     else if (newRole === 'admin') navigate('/admin/dashboard');
   };
 
@@ -42,6 +43,7 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
     if (!searchQuery.trim()) return;
     if (role === 'student') navigate(`/student/notices?q=${encodeURIComponent(searchQuery)}`);
     else if (role === 'teacher') navigate(`/teacher/students?q=${encodeURIComponent(searchQuery)}`);
+    else if (role === 'hod') navigate(`/hod/students?q=${encodeURIComponent(searchQuery)}`);
     else navigate(`/admin/students?q=${encodeURIComponent(searchQuery)}`);
   };
 
@@ -102,6 +104,14 @@ export const Header: React.FC<HeaderProps> = ({ onOpenMobileSidebar }) => {
                 }`}
               >
                 <span>👩‍🏫 Teacher Portal</span>
+              </button>
+              <button
+                onClick={() => handleRoleSwitch('hod')}
+                className={`w-full text-left px-3 py-2 flex items-center justify-between hover:bg-slate-50 dark:hover:bg-slate-800 ${
+                  role === 'hod' ? 'font-bold text-brand-600 dark:text-brand-400' : 'text-slate-700 dark:text-slate-300'
+                }`}
+              >
+                <span>👔 HOD Portal</span>
               </button>
               <button
                 onClick={() => handleRoleSwitch('admin')}
