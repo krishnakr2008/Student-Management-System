@@ -9,7 +9,7 @@ export interface LoginResult {
   actualRole?: UserRole;
 }
 
-export const normalizeUserRole = (rawRole?: string | null): UserRole | null => {
+export const normalizeUserRole = (rawRole?: unknown): UserRole | null => {
   if (!rawRole || typeof rawRole !== 'string') return null;
   const cleaned = rawRole.trim().toLowerCase();
   if (cleaned === 'student') return 'student';
@@ -50,9 +50,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     localStorage.removeItem('auth_role');
   };
 
-  const applyUserProfile = async (profile: UserProfile) => {
-    const actualRole = normalizeUserRole(profile?.role);
-    if (!profile || !actualRole) {
+  const applyUserProfile = async (profile: UserProfile | null) => {
+    if (!profile || !profile.role) {
+      clearUserState();
+      return;
+    }
+
+    const actualRole = normalizeUserRole(profile.role);
+    if (!actualRole) {
       clearUserState();
       return;
     }
@@ -64,12 +69,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (actualRole === 'student') {
         const students = await dbService.getStudents();
-        const st = students.find(s => s.profile_id === profile.id) || students[0] || null;
+        const st = students.find(s => s && s.profile_id === profile.id) || students[0] || null;
         setStudent(st);
         setTeacher(null);
       } else if (actualRole === 'teacher') {
         const teachers = await dbService.getTeachers();
-        const tc = teachers.find(t => t.profile_id === profile.id) || teachers[0] || null;
+        const tc = teachers.find(t => t && t.profile_id === profile.id) || teachers[0] || null;
         setTeacher(tc);
         setStudent(null);
       } else {
@@ -77,7 +82,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setTeacher(null);
       }
 
-      localStorage.setItem('auth_email', profile.email);
+      if (profile.email) {
+        localStorage.setItem('auth_email', profile.email);
+      }
       localStorage.setItem('auth_role', actualRole);
     } catch (err) {
       console.error('Error loading role entity data:', err);
@@ -86,14 +93,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const loadUserByEmailAndRole = async (emailOrIdentifier: string, targetRole: UserRole) => {
     try {
-      let profile = await dbService.getProfileByIdentifier(emailOrIdentifier);
+      let profile: UserProfile | null = null;
+
+      if (emailOrIdentifier) {
+        profile = await dbService.getProfileByIdentifier(emailOrIdentifier);
+      }
 
       if (!profile) {
         const profiles = await dbService.getProfiles();
-        profile = profiles.find(p => normalizeUserRole(p.role) === targetRole) || profiles[0] || null;
+        profile = profiles.find(p => p && p.role && normalizeUserRole(p.role) === targetRole) || null;
       }
 
-      if (profile) {
+      if (profile && profile.role) {
         const actualRole = normalizeUserRole(profile.role);
         if (actualRole) {
           await applyUserProfile({ ...profile, role: actualRole });
@@ -133,9 +144,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      const actualRole = normalizeUserRole(profile.role);
-      if (actualRole) {
-        await applyUserProfile({ ...profile, role: actualRole });
+      if (profile && profile.role) {
+        const actualRole = normalizeUserRole(profile.role);
+        if (actualRole) {
+          await applyUserProfile({ ...profile, role: actualRole });
+        } else {
+          clearUserState();
+        }
       } else {
         clearUserState();
       }
@@ -148,7 +163,30 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   useEffect(() => {
+    let subscription: { unsubscribe: () => void } | null = null;
+
+    if (isRealSupabaseConfigured()) {
+      const { data: authListener } = supabase.auth.onAuthStateChange(async (event, session) => {
+        if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED') {
+          if (session && session.user) {
+            const profile = await dbService.getProfileById(session.user.id) ||
+                            await dbService.getProfileByEmail(session.user.email || '');
+            if (profile && profile.role) {
+              await applyUserProfile(profile);
+            }
+          }
+        } else if (event === 'SIGNED_OUT') {
+          clearUserState();
+        }
+      });
+      subscription = authListener.subscription;
+    }
+
     loadInitialUser();
+
+    return () => {
+      if (subscription) subscription.unsubscribe();
+    };
   }, []);
 
   const login = async (identifier: string, reqRole?: UserRole, password?: string): Promise<LoginResult> => {
@@ -158,8 +196,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 1. Supabase Mode
       if (isRealSupabaseConfigured() && password) {
-        let loginEmail = identifier.trim();
-        if (!loginEmail.includes('@')) {
+        let loginEmail = identifier ? identifier.trim() : '';
+        if (loginEmail && !loginEmail.includes('@')) {
           const preLook = await dbService.getProfileByIdentifier(loginEmail);
           if (preLook && preLook.email) loginEmail = preLook.email;
         }
@@ -203,7 +241,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         profile = await dbService.getProfileByIdentifier(identifier);
         if (!profile && reqRole) {
           const profiles = await dbService.getProfiles();
-          profile = profiles.find(p => normalizeUserRole(p.role) === reqRole) || null;
+          profile = profiles.find(p => p && p.role && normalizeUserRole(p.role) === reqRole) || null;
         }
 
         if (!profile) {
@@ -216,6 +254,14 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       }
 
       // 3. Verify and Normalize Role
+      if (!profile || !profile.role) {
+        clearUserState();
+        return {
+          success: false,
+          error: 'User role is not configured. Please contact the administrator.',
+        };
+      }
+
       const actualRole = normalizeUserRole(profile.role);
       if (!actualRole) {
         clearUserState();
@@ -227,7 +273,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const normalizedProfile: UserProfile = { ...profile, role: actualRole };
 
-      // 4. Role Authorization / Mismatch Check (Requirement 6 & 13)
+      // 4. Role Authorization / Mismatch Check (Step 5 & Requirement 13)
       if (reqRole && actualRole !== reqRole) {
         clearUserState();
         return {
@@ -243,7 +289,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       clearUserState();
       return {
         success: false,
-        error: e?.message || 'Database query error during login. Please try again.',
+        error: e?.message || 'Unable to load user profile. Please try again.',
       };
     } finally {
       setLoading(false);
@@ -316,7 +362,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUserData = async () => {
     if (user && user.email) {
-      const currentRole = role || normalizeUserRole(user.role) || 'student';
+      const currentRole = role || (user.role ? normalizeUserRole(user.role) : null) || 'student';
       await loadUserByEmailAndRole(user.email, currentRole);
     }
   };
