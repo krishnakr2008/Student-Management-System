@@ -2,10 +2,10 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { dbService } from '../../services/dbService';
-import { User, BookOpen, Shield, Save, Upload, Edit, Check } from 'lucide-react';
+import { User, BookOpen, Shield, Save, Upload, Edit, Check, Briefcase } from 'lucide-react';
 
 export const StudentProfile: React.FC = () => {
-  const { user, student, refreshUserData } = useAuth();
+  const { user, student, teacher, role, refreshUserData } = useAuth();
   const { showToast } = useToast();
 
   const [isEditing, setIsEditing] = useState(false);
@@ -13,11 +13,13 @@ export const StudentProfile: React.FC = () => {
     full_name: user?.full_name || '',
     phone: user?.phone || '',
     gender: user?.gender || 'Male',
-    dob: user?.dob || '2003-05-14',
+    dob: user?.dob || '1995-05-14',
     address: user?.address || '42 University Heights, Campus Town',
     guardian_name: student?.guardian_name || 'Robert Johnson Sr.',
     guardian_phone: student?.guardian_phone || '+1 555-9081',
     guardian_relation: student?.guardian_relation || 'Father',
+    department: teacher?.department || 'Computer Science',
+    designation: teacher?.designation || 'Associate Professor',
     avatar_url: user?.avatar_url || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150',
   });
 
@@ -35,7 +37,7 @@ export const StudentProfile: React.FC = () => {
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !student) return;
+    if (!user) return;
 
     try {
       await dbService.updateProfile(user.id, {
@@ -47,21 +49,28 @@ export const StudentProfile: React.FC = () => {
         avatar_url: formData.avatar_url,
       });
 
-      await dbService.updateStudent(student.id, {
-        guardian_name: formData.guardian_name,
-        guardian_phone: formData.guardian_phone,
-        guardian_relation: formData.guardian_relation,
-      });
+      if (student) {
+        await dbService.updateStudent(student.id, {
+          guardian_name: formData.guardian_name,
+          guardian_phone: formData.guardian_phone,
+          guardian_relation: formData.guardian_relation,
+        });
+      } else if (teacher) {
+        await dbService.updateTeacher(teacher.id, {
+          department: formData.department,
+          designation: formData.designation,
+        });
+      }
 
       await refreshUserData();
       setIsEditing(false);
-      showToast('Profile Saved', 'Your student details have been updated.', 'success');
+      showToast('Profile Saved', 'Profile details updated successfully.', 'success');
     } catch (err) {
       showToast('Error', 'Failed to save profile changes.', 'error');
     }
   };
 
-  if (!user || !student) return null;
+  if (!user) return null;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">
@@ -83,19 +92,44 @@ export const StudentProfile: React.FC = () => {
           </div>
 
           <div>
-            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
-              {user.full_name}
-            </h1>
-            <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              {student.course_name} • Semester {student.semester} ({student.section})
-            </p>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">
+                {user.full_name}
+              </h1>
+              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-black uppercase tracking-wider bg-brand-100 text-brand-700 dark:bg-brand-950 dark:text-brand-300">
+                {role === 'admin' ? 'HOD / Admin' : role === 'teacher' ? 'Faculty Member' : 'Student'}
+              </span>
+            </div>
+
+            {student && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {student.course_name} • Semester {student.semester} ({student.section})
+              </p>
+            )}
+
+            {teacher && (
+              <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
+                {teacher.designation} • Dept of {teacher.department}
+              </p>
+            )}
+
             <div className="flex items-center gap-2 mt-2">
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/30">
-                ID: {student.student_id_code}
-              </span>
-              <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30">
-                Roll: {student.roll_number}
-              </span>
+              {student && (
+                <>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 border border-brand-500/30">
+                    ID: {student.student_id_code}
+                  </span>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/30">
+                    Roll: {student.roll_number}
+                  </span>
+                </>
+              )}
+
+              {teacher && (
+                <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30">
+                  Teacher Code: {teacher.teacher_id_code}
+                </span>
+              )}
             </div>
           </div>
         </div>
@@ -178,71 +212,109 @@ export const StudentProfile: React.FC = () => {
           </div>
         </div>
 
-        {/* Academic Details */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-            <BookOpen className="w-5 h-5 text-brand-600 dark:text-brand-400" />
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Academic Information</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
-              <span className="text-slate-400 block font-medium">Department</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">{student.department}</span>
-            </div>
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
-              <span className="text-slate-400 block font-medium">Branch</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">{student.branch}</span>
-            </div>
-            <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
-              <span className="text-slate-400 block font-medium">Admission Year</span>
-              <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">{student.admission_year}</span>
-            </div>
-          </div>
-        </div>
-
-        {/* Guardian Information */}
-        <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
-          <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
-            <Shield className="w-5 h-5 text-brand-600 dark:text-brand-400" />
-            <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Guardian Contact</h2>
-          </div>
-
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Guardian Name</label>
-              <input
-                type="text"
-                disabled={!isEditing}
-                value={formData.guardian_name}
-                onChange={e => setFormData({ ...formData, guardian_name: e.target.value })}
-                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
-              />
+        {/* Academic Details for Student */}
+        {student && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <BookOpen className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Academic Information</h2>
             </div>
 
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Guardian Phone</label>
-              <input
-                type="text"
-                disabled={!isEditing}
-                value={formData.guardian_phone}
-                onChange={e => setFormData({ ...formData, guardian_phone: e.target.value })}
-                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
-              />
-            </div>
-
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Relationship</label>
-              <input
-                type="text"
-                disabled={!isEditing}
-                value={formData.guardian_relation}
-                onChange={e => setFormData({ ...formData, guardian_relation: e.target.value })}
-                className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
-              />
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs">
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
+                <span className="text-slate-400 block font-medium">Department</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">{student.department}</span>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
+                <span className="text-slate-400 block font-medium">Branch</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">{student.branch}</span>
+              </div>
+              <div className="p-3 bg-slate-50 dark:bg-slate-800/40 rounded-xl">
+                <span className="text-slate-400 block font-medium">Admission Year</span>
+                <span className="font-bold text-slate-800 dark:text-slate-200 mt-1 block">{student.admission_year}</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
+
+        {/* Professional Details for Teacher */}
+        {teacher && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <Briefcase className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Faculty & Professional Information</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Department</label>
+                <input
+                  type="text"
+                  disabled={!isEditing}
+                  value={formData.department}
+                  onChange={e => setFormData({ ...formData, department: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Designation</label>
+                <input
+                  type="text"
+                  disabled={!isEditing}
+                  value={formData.designation}
+                  onChange={e => setFormData({ ...formData, designation: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
+                />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Guardian Information for Student */}
+        {student && (
+          <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center gap-2 pb-2 border-b border-slate-100 dark:border-slate-800">
+              <Shield className="w-5 h-5 text-brand-600 dark:text-brand-400" />
+              <h2 className="text-base font-bold text-slate-900 dark:text-slate-100">Guardian Contact</h2>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Guardian Name</label>
+                <input
+                  type="text"
+                  disabled={!isEditing}
+                  value={formData.guardian_name}
+                  onChange={e => setFormData({ ...formData, guardian_name: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Guardian Phone</label>
+                <input
+                  type="text"
+                  disabled={!isEditing}
+                  value={formData.guardian_phone}
+                  onChange={e => setFormData({ ...formData, guardian_phone: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Relationship</label>
+                <input
+                  type="text"
+                  disabled={!isEditing}
+                  value={formData.guardian_relation}
+                  onChange={e => setFormData({ ...formData, guardian_relation: e.target.value })}
+                  className="w-full px-3.5 py-2 bg-slate-50 dark:bg-slate-800/60 border border-slate-200 dark:border-slate-700 rounded-xl text-xs text-slate-900 dark:text-slate-100 disabled:opacity-75 focus:outline-hidden focus:border-brand-500"
+                />
+              </div>
+            </div>
+          </div>
+        )}
 
         {isEditing && (
           <div className="flex justify-end gap-3 pt-2">

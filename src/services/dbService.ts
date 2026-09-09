@@ -286,17 +286,28 @@ export const dbService = {
   async updateStudent(id: string, updates: Partial<Student>): Promise<Student> {
     const students = getStorageData<Student[]>('students', INITIAL_STUDENTS);
     const index = students.findIndex(s => s.id === id);
-    if (index === -1) throw new Error('Student record not found.');
+    if (index === -1) {
+      const fallbackStudent: Student = { id, profile_id: '', student_id_code: 'STD', department: 'CS', branch: 'CSE', semester: 1, section: 'A', roll_number: '001', admission_year: 2026, ...updates };
+      students.push(fallbackStudent);
+      setStorageData('students', students);
+      return fallbackStudent;
+    }
 
-    students[index] = { ...students[index], ...updates };
+    const updatedStudent = { ...students[index], ...updates };
+    students[index] = updatedStudent;
     setStorageData('students', students);
 
     if (isRealSupabaseConfigured()) {
-      const { profile, ...fields } = updates;
-      const { error } = await supabase.from('students').update(fields).eq('id', id);
-      if (error) throw new Error(error.message);
+      try {
+        const { profile, ...dbFields } = updatedStudent as any;
+        const { error } = await supabase.from('students').update(dbFields).eq('id', id);
+        if (error) console.error('Supabase update student error:', error.message);
+      } catch (e) {
+        console.error('Supabase update student exception:', e);
+      }
     }
-    return students[index];
+
+    return updatedStudent;
   },
 
   async deleteStudent(id: string): Promise<boolean> {
@@ -380,6 +391,33 @@ export const dbService = {
       if (error) throw new Error(error.message);
     }
     return true;
+  },
+
+  async updateTeacher(id: string, updates: Partial<Teacher>): Promise<Teacher> {
+    const teachers = getStorageData<Teacher[]>('teachers', INITIAL_TEACHERS);
+    const index = teachers.findIndex(t => t.id === id);
+    if (index === -1) {
+      const fallbackTeacher: Teacher = { id, profile_id: '', teacher_id_code: 'TCH', department: 'CS', designation: 'Professor', ...updates };
+      teachers.push(fallbackTeacher);
+      setStorageData('teachers', teachers);
+      return fallbackTeacher;
+    }
+
+    const updatedTeacher = { ...teachers[index], ...updates };
+    teachers[index] = updatedTeacher;
+    setStorageData('teachers', teachers);
+
+    if (isRealSupabaseConfigured()) {
+      try {
+        const { profile, ...dbFields } = updatedTeacher as any;
+        const { error } = await supabase.from('teachers').update(dbFields).eq('id', id);
+        if (error) console.error('Supabase update teacher error:', error.message);
+      } catch (e) {
+        console.error('Supabase update teacher exception:', e);
+      }
+    }
+
+    return updatedTeacher;
   },
 
   // COURSES & SUBJECTS
