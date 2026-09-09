@@ -9,6 +9,16 @@ export interface LoginResult {
   actualRole?: UserRole;
 }
 
+export const normalizeUserRole = (rawRole?: string | null): UserRole | null => {
+  if (!rawRole || typeof rawRole !== 'string') return null;
+  const cleaned = rawRole.trim().toLowerCase();
+  if (cleaned === 'student') return 'student';
+  if (cleaned === 'teacher' || cleaned === 'faculty' || cleaned === 'instructor') return 'teacher';
+  if (cleaned === 'hod' || cleaned === 'head of department') return 'hod';
+  if (cleaned === 'admin' || cleaned === 'administrator') return 'admin';
+  return null;
+};
+
 interface AuthContextType {
   user: UserProfile | null;
   student: Student | null;
@@ -41,31 +51,37 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   };
 
   const applyUserProfile = async (profile: UserProfile) => {
-    if (!profile || !profile.role) {
+    const actualRole = normalizeUserRole(profile?.role);
+    if (!profile || !actualRole) {
       clearUserState();
       return;
     }
 
-    setUser(profile);
-    setRole(profile.role);
+    const normalizedProfile: UserProfile = { ...profile, role: actualRole };
+    setUser(normalizedProfile);
+    setRole(actualRole);
 
-    if (profile.role === 'student') {
-      const students = await dbService.getStudents();
-      const st = students.find(s => s.profile_id === profile.id) || students[0] || null;
-      setStudent(st);
-      setTeacher(null);
-    } else if (profile.role === 'teacher') {
-      const teachers = await dbService.getTeachers();
-      const tc = teachers.find(t => t.profile_id === profile.id) || teachers[0] || null;
-      setTeacher(tc);
-      setStudent(null);
-    } else {
-      setStudent(null);
-      setTeacher(null);
+    try {
+      if (actualRole === 'student') {
+        const students = await dbService.getStudents();
+        const st = students.find(s => s.profile_id === profile.id) || students[0] || null;
+        setStudent(st);
+        setTeacher(null);
+      } else if (actualRole === 'teacher') {
+        const teachers = await dbService.getTeachers();
+        const tc = teachers.find(t => t.profile_id === profile.id) || teachers[0] || null;
+        setTeacher(tc);
+        setStudent(null);
+      } else {
+        setStudent(null);
+        setTeacher(null);
+      }
+
+      localStorage.setItem('auth_email', profile.email);
+      localStorage.setItem('auth_role', actualRole);
+    } catch (err) {
+      console.error('Error loading role entity data:', err);
     }
-
-    localStorage.setItem('auth_email', profile.email);
-    localStorage.setItem('auth_role', profile.role);
   };
 
   const loadUserByEmailAndRole = async (emailOrIdentifier: string, targetRole: UserRole) => {
@@ -74,15 +90,19 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (!profile) {
         const profiles = await dbService.getProfiles();
-        profile = profiles.find(p => p.role === targetRole) || profiles[0] || null;
+        profile = profiles.find(p => normalizeUserRole(p.role) === targetRole) || profiles[0] || null;
       }
 
-      if (profile && profile.role) {
-        await applyUserProfile(profile);
-      } else {
-        console.warn('No user profile or role found in database for:', emailOrIdentifier);
-        clearUserState();
+      if (profile) {
+        const actualRole = normalizeUserRole(profile.role);
+        if (actualRole) {
+          await applyUserProfile({ ...profile, role: actualRole });
+          return;
+        }
       }
+
+      console.warn('No valid user profile or configured role found for:', emailOrIdentifier);
+      clearUserState();
     } catch (e) {
       console.error('Error in loadUserByEmailAndRole:', e);
       clearUserState();
@@ -92,10 +112,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const loadInitialUser = async () => {
     try {
       setLoading(true);
-
       let profile: UserProfile | null = null;
 
-      // 1. If real Supabase is configured, check active Supabase Auth session
+      // 1. Check Supabase Auth active session
       if (isRealSupabaseConfigured()) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session && session.user) {
@@ -106,7 +125,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       }
 
-      // 2. If no profile from Supabase session, fallback to stored user credentials
+      // 2. Fallback to stored local user
       if (!profile) {
         const savedEmail = localStorage.getItem('auth_email') || 'student1@college.com';
         const savedRole = (localStorage.getItem('auth_role') as UserRole) || 'student';
@@ -114,9 +133,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      // 3. Process the retrieved profile safely
-      if (profile && profile.role) {
-        await applyUserProfile(profile);
+      const actualRole = normalizeUserRole(profile.role);
+      if (actualRole) {
+        await applyUserProfile({ ...profile, role: actualRole });
       } else {
         clearUserState();
       }
@@ -137,58 +156,95 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       let profile: UserProfile | null = null;
 
-      // Real Supabase Auth handling
+      // 1. Supabase Mode
       if (isRealSupabaseConfigured() && password) {
-        let loginEmail = identifier;
-        if (!identifier.includes('@')) {
-          const preLook = await dbService.getProfileByIdentifier(identifier);
+        let loginEmail = identifier.trim();
+        if (!loginEmail.includes('@')) {
+          const preLook = await dbService.getProfileByIdentifier(loginEmail);
           if (preLook && preLook.email) loginEmail = preLook.email;
         }
 
-        const { data, error: authError } = await supabase.auth.signInWithPassword({
+        const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
           email: loginEmail,
           password: password,
         });
 
         if (authError) {
-          return { success: false, error: authError.message || 'Invalid email or password.' };
+          clearUserState();
+          return {
+            success: false,
+            error: authError.message || 'Invalid email or password.',
+          };
         }
 
-        if (data && data.user) {
-          profile = await dbService.getProfileById(data.user.id);
-          if (!profile && data.user.email) {
-            profile = await dbService.getProfileByEmail(data.user.email);
-          }
+        if (!authData || !authData.user) {
+          clearUserState();
+          return {
+            success: false,
+            error: 'Authentication failed. No user session returned.',
+          };
+        }
+
+        const authUser = authData.user;
+        profile = await dbService.getProfileById(authUser.id);
+        if (!profile && authUser.email) {
+          profile = await dbService.getProfileByEmail(authUser.email);
+        }
+
+        if (!profile) {
+          clearUserState();
+          return {
+            success: false,
+            error: 'User profile not found. Please contact the administrator.',
+          };
         }
       } else {
-        // LocalStorage / Demo Mode lookup
+        // 2. Local Storage / Demo Mode
         profile = await dbService.getProfileByIdentifier(identifier);
         if (!profile && reqRole) {
           const profiles = await dbService.getProfiles();
-          profile = profiles.find(p => p.role === reqRole) || null;
+          profile = profiles.find(p => normalizeUserRole(p.role) === reqRole) || null;
+        }
+
+        if (!profile) {
+          clearUserState();
+          return {
+            success: false,
+            error: 'User profile not found. Please contact the administrator.',
+          };
         }
       }
 
-      // Check if profile exists and has a configured role
-      if (!profile || !profile.role) {
+      // 3. Verify and Normalize Role
+      const actualRole = normalizeUserRole(profile.role);
+      if (!actualRole) {
         clearUserState();
         return {
           success: false,
-          error: 'User profile or role is not configured in database.',
+          error: 'User role is not configured. Please contact the administrator.',
         };
       }
 
-      // Role authorization
-      if (reqRole && profile.role !== reqRole) {
-        console.warn(`Requested role '${reqRole}' mismatched with actual DB role '${profile.role}'. Granting access for '${profile.role}'.`);
+      const normalizedProfile: UserProfile = { ...profile, role: actualRole };
+
+      // 4. Role Authorization / Mismatch Check (Requirement 6 & 13)
+      if (reqRole && actualRole !== reqRole) {
+        clearUserState();
+        return {
+          success: false,
+          error: `Role Mismatch: Your account is registered as ${actualRole.toUpperCase()}. Please log in through the ${actualRole.toUpperCase()} Portal.`,
+        };
       }
 
-      await applyUserProfile(profile);
-      return { success: true, actualRole: profile.role };
+      await applyUserProfile(normalizedProfile);
+      return { success: true, actualRole };
     } catch (e: any) {
-      console.error('Login exception:', e);
+      console.error('Login error:', e);
       clearUserState();
-      return { success: false, error: e?.message || 'Authentication error occurred.' };
+      return {
+        success: false,
+        error: e?.message || 'Database query error during login. Please try again.',
+      };
     } finally {
       setLoading(false);
     }
@@ -211,7 +267,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           { full_name, email, role: 'student' }
         );
-        if (newStudent.profile && newStudent.profile.role) {
+        if (newStudent.profile) {
           await applyUserProfile(newStudent.profile);
         }
       } else if (newRole === 'teacher') {
@@ -224,7 +280,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           },
           { full_name, email, role: 'teacher' }
         );
-        if (newTeacher.profile && newTeacher.profile.role) {
+        if (newTeacher.profile) {
           await applyUserProfile(newTeacher.profile);
         }
       }
@@ -260,7 +316,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
   const refreshUserData = async () => {
     if (user && user.email) {
-      await loadUserByEmailAndRole(user.email, role || user.role || 'student');
+      const currentRole = role || normalizeUserRole(user.role) || 'student';
+      await loadUserByEmailAndRole(user.email, currentRole);
     }
   };
 
