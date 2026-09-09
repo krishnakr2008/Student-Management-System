@@ -94,9 +94,15 @@ export const dbService = {
   // PROFILES
   async getProfiles(): Promise<UserProfile[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('profiles').select('*');
-      if (error) throw new Error(error.message);
-      return data as UserProfile[];
+      try {
+        const { data, error } = await supabase.from('profiles').select('*');
+        if (!error && data && data.length > 0) {
+          return data as UserProfile[];
+        }
+      } catch (e) {
+        console.warn('Supabase getProfiles query error, using local/demo profiles:', e);
+      }
+      return getStorageData('profiles', INITIAL_PROFILES);
     }
     return getStorageData('profiles', INITIAL_PROFILES);
   },
@@ -104,29 +110,42 @@ export const dbService = {
   async getProfileById(id: string): Promise<UserProfile | null> {
     if (!id) return null;
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
-      if (error || !data) return null;
-      return data as UserProfile;
+      try {
+        const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+        if (!error && data) return data as UserProfile;
+      } catch (e) {
+        console.warn('Supabase getProfileById error:', e);
+      }
     }
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
-    return profiles.find(p => p.id === id) || null;
+    const match = profiles.find(p => p && p.id === id);
+    if (match) return match;
+    return INITIAL_PROFILES.find(p => p && p.id === id) || null;
   },
 
   async getProfileByEmail(email: string): Promise<UserProfile | null> {
     if (!email) return null;
     const cleanEmail = email.trim().toLowerCase();
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('profiles').select('*').ilike('email', cleanEmail).maybeSingle();
-      if (error || !data) return null;
-      return data as UserProfile;
+      try {
+        const { data, error } = await supabase.from('profiles').select('*').ilike('email', cleanEmail).maybeSingle();
+        if (!error && data) return data as UserProfile;
+      } catch (e) {
+        console.warn('Supabase getProfileByEmail error:', e);
+      }
+      // Fallback to INITIAL_PROFILES strictly by exact matching email
+      const demoMatch = INITIAL_PROFILES.find(p => p && p.email && p.email.trim().toLowerCase() === cleanEmail);
+      return demoMatch || null;
     }
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
-    return profiles.find(p => p.email && p.email.toLowerCase() === cleanEmail) || null;
+    const match = profiles.find(p => p && p.email && p.email.trim().toLowerCase() === cleanEmail);
+    if (match) return match;
+    return INITIAL_PROFILES.find(p => p && p.email && p.email.trim().toLowerCase() === cleanEmail) || null;
   },
 
   async getProfileByIdentifier(identifier: string): Promise<UserProfile | null> {
     if (!identifier) return null;
-    const input = identifier.trim();
+    const input = identifier.trim().toLowerCase();
 
     // 1. Check if email
     if (input.includes('@')) {
@@ -134,35 +153,53 @@ export const dbService = {
     }
 
     // 2. Check student roll number or student ID code
-    const students = await this.getStudents(true);
-    const matchedStudent = students.find(
-      s => (s.roll_number && s.roll_number.toLowerCase() === input.toLowerCase()) ||
-           (s.student_id_code && s.student_id_code.toLowerCase() === input.toLowerCase())
-    );
-    if (matchedStudent && matchedStudent.profile_id) {
-      const p = await this.getProfileById(matchedStudent.profile_id);
-      if (p) return p;
+    try {
+      const students = await this.getStudents(true);
+      const matchedStudent = students.find(
+        s => s && ((s.roll_number && s.roll_number.trim().toLowerCase() === input) ||
+             (s.student_id_code && s.student_id_code.trim().toLowerCase() === input))
+      );
+      if (matchedStudent && matchedStudent.profile_id) {
+        const p = await this.getProfileById(matchedStudent.profile_id);
+        if (p) return p;
+      }
+    } catch (e) {
+      console.warn('Error checking student identifier:', e);
     }
 
     // 3. Check teacher ID code
-    const teachers = await this.getTeachers(true);
-    const matchedTeacher = teachers.find(
-      t => t.teacher_id_code && t.teacher_id_code.toLowerCase() === input.toLowerCase()
-    );
-    if (matchedTeacher && matchedTeacher.profile_id) {
-      const p = await this.getProfileById(matchedTeacher.profile_id);
-      if (p) return p;
+    try {
+      const teachers = await this.getTeachers(true);
+      const matchedTeacher = teachers.find(
+        t => t && t.teacher_id_code && t.teacher_id_code.trim().toLowerCase() === input
+      );
+      if (matchedTeacher && matchedTeacher.profile_id) {
+        const p = await this.getProfileById(matchedTeacher.profile_id);
+        if (p) return p;
+      }
+    } catch (e) {
+      console.warn('Error checking teacher identifier:', e);
     }
 
     // 4. Check HOD ID code
-    const hods = await this.getHODs();
-    const matchedHod = hods.find(
-      h => h.hod_id_code && h.hod_id_code.toLowerCase() === input.toLowerCase()
-    );
-    if (matchedHod && matchedHod.profile_id) {
-      const p = await this.getProfileById(matchedHod.profile_id);
-      if (p) return p;
+    try {
+      const hods = await this.getHODs();
+      const matchedHod = hods.find(
+        h => h && h.hod_id_code && h.hod_id_code.trim().toLowerCase() === input
+      );
+      if (matchedHod && matchedHod.profile_id) {
+        const p = await this.getProfileById(matchedHod.profile_id);
+        if (p) return p;
+      }
+    } catch (e) {
+      console.warn('Error checking HOD identifier:', e);
     }
+
+    // 5. Direct email match fallback on INITIAL_PROFILES
+    const demoMatch = INITIAL_PROFILES.find(
+      p => p && p.email && p.email.trim().toLowerCase() === input
+    );
+    if (demoMatch) return demoMatch;
 
     return null;
   },

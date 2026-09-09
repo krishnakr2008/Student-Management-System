@@ -95,8 +95,8 @@ export const AdminTeachers: React.FC = () => {
   };
 
   const filtered = teachers.filter(t =>
-    t.profile?.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    t.teacher_id_code.toLowerCase().includes(search.toLowerCase())
+    (t.profile?.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (t.teacher_id_code || '').toLowerCase().includes(search.toLowerCase())
   );
 
   return (

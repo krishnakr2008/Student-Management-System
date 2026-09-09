@@ -22,9 +22,9 @@ export const TeacherStudents: React.FC = () => {
   }, [teacher?.id]);
 
   const filtered = students.filter(s =>
-    s.profile?.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    s.roll_number.toLowerCase().includes(search.toLowerCase()) ||
-    s.student_id_code.toLowerCase().includes(search.toLowerCase())
+    (s.profile?.full_name || '').toLowerCase().includes(search.toLowerCase()) ||
+    (s.roll_number || '').toLowerCase().includes(search.toLowerCase()) ||
+    (s.student_id_code || '').toLowerCase().includes(search.toLowerCase())
   );
 
   if (loading) {

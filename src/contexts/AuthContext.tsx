@@ -69,12 +69,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       if (actualRole === 'student') {
         const students = await dbService.getStudents();
-        const st = students.find(s => s && s.profile_id === profile.id) || students[0] || null;
+        const st = students.find(s => s && s.profile_id === profile.id) || null;
         setStudent(st);
         setTeacher(null);
       } else if (actualRole === 'teacher') {
         const teachers = await dbService.getTeachers();
-        const tc = teachers.find(t => t && t.profile_id === profile.id) || teachers[0] || null;
+        const tc = teachers.find(t => t && t.profile_id === profile.id) || null;
         setTeacher(tc);
         setStudent(null);
       } else {
@@ -91,17 +91,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const loadUserByEmailAndRole = async (emailOrIdentifier: string, targetRole: UserRole) => {
+  const loadUserByEmailAndRole = async (emailOrIdentifier: string, _targetRole?: UserRole) => {
     try {
       let profile: UserProfile | null = null;
 
       if (emailOrIdentifier) {
         profile = await dbService.getProfileByIdentifier(emailOrIdentifier);
-      }
-
-      if (!profile) {
-        const profiles = await dbService.getProfiles();
-        profile = profiles.find(p => p && p.role && normalizeUserRole(p.role) === targetRole) || null;
       }
 
       if (profile && profile.role) {
@@ -127,21 +122,25 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       // 1. Check Supabase Auth active session
       if (isRealSupabaseConfigured()) {
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session && session.user) {
-          profile = await dbService.getProfileById(session.user.id);
-          if (!profile && session.user.email) {
-            profile = await dbService.getProfileByEmail(session.user.email);
+        try {
+          const { data: { session } } = await supabase.auth.getSession();
+          if (session && session.user) {
+            profile = await dbService.getProfileById(session.user.id);
+            if (!profile && session.user.email) {
+              profile = await dbService.getProfileByEmail(session.user.email);
+            }
           }
+        } catch (e) {
+          console.warn('Error reading Supabase session:', e);
         }
       }
 
-      // 2. Fallback to stored local user
+      // 2. Fallback to stored local user email
       if (!profile) {
-        const savedEmail = localStorage.getItem('auth_email') || 'student1@college.com';
-        const savedRole = (localStorage.getItem('auth_role') as UserRole) || 'student';
-        await loadUserByEmailAndRole(savedEmail, savedRole);
-        return;
+        const savedEmail = localStorage.getItem('auth_email');
+        if (savedEmail) {
+          profile = await dbService.getProfileByEmail(savedEmail);
+        }
       }
 
       if (profile && profile.role) {
@@ -194,10 +193,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       let profile: UserProfile | null = null;
 
+      if (!identifier || !identifier.trim()) {
+        clearUserState();
+        return {
+          success: false,
+          error: 'User profile not found. Please contact the administrator.',
+        };
+      }
+
+      const cleanIdentifier = identifier.trim();
+
       // 1. Supabase Mode
       if (isRealSupabaseConfigured() && password) {
-        let loginEmail = identifier ? identifier.trim() : '';
-        if (loginEmail && !loginEmail.includes('@')) {
+        let loginEmail = cleanIdentifier;
+        if (!loginEmail.includes('@')) {
           const preLook = await dbService.getProfileByIdentifier(loginEmail);
           if (preLook && preLook.email) loginEmail = preLook.email;
         }
@@ -215,42 +224,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           };
         }
 
-        if (!authData || !authData.user) {
-          clearUserState();
-          return {
-            success: false,
-            error: 'Authentication failed. No user session returned.',
-          };
+        if (authData && authData.user) {
+          const authUser = authData.user;
+          profile = await dbService.getProfileById(authUser.id);
+          if (!profile && authUser.email) {
+            profile = await dbService.getProfileByEmail(authUser.email);
+          }
         }
+      }
 
-        const authUser = authData.user;
-        profile = await dbService.getProfileById(authUser.id);
-        if (!profile && authUser.email) {
-          profile = await dbService.getProfileByEmail(authUser.email);
-        }
+      // 2. Demo Mode or Local Lookup
+      if (!profile) {
+        profile = await dbService.getProfileByIdentifier(cleanIdentifier);
+      }
 
-        if (!profile) {
-          clearUserState();
-          return {
-            success: false,
-            error: 'User profile not found. Please contact the administrator.',
-          };
-        }
-      } else {
-        // 2. Local Storage / Demo Mode
-        profile = await dbService.getProfileByIdentifier(identifier);
-        if (!profile && reqRole) {
-          const profiles = await dbService.getProfiles();
-          profile = profiles.find(p => p && p.role && normalizeUserRole(p.role) === reqRole) || null;
-        }
-
-        if (!profile) {
-          clearUserState();
-          return {
-            success: false,
-            error: 'User profile not found. Please contact the administrator.',
-          };
-        }
+      if (!profile) {
+        clearUserState();
+        return {
+          success: false,
+          error: 'User profile not found. Please contact the administrator.',
+        };
       }
 
       // 3. Verify and Normalize Role
