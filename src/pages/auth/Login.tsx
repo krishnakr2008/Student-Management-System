@@ -67,7 +67,7 @@ export const Login: React.FC = () => {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Student Portal Card */}
           <div
-            onClick={() => navigate('/login/student')}
+            onClick={() => handleQuickFill('student1@college.com', 'student')}
             className="group bg-slate-900/90 border border-slate-800 hover:border-brand-500/50 rounded-3xl p-5 shadow-xl hover:shadow-brand-500/10 cursor-pointer transition-all hover:-translate-y-1 flex flex-col justify-between space-y-4"
           >
             <div className="space-y-3">
@@ -84,14 +84,14 @@ export const Login: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center text-xs font-bold text-brand-400 gap-1.5 group-hover:translate-x-1 transition-transform">
-              <span>Open Student Portal</span>
+              <span>Select Student Portal</span>
               <ArrowRight className="w-4 h-4" />
             </div>
           </div>
 
           {/* Teacher Portal Card */}
           <div
-            onClick={() => navigate('/login/teacher')}
+            onClick={() => handleQuickFill('teacher1@college.com', 'teacher')}
             className="group bg-slate-900/90 border border-slate-800 hover:border-emerald-500/50 rounded-3xl p-5 shadow-xl hover:shadow-emerald-500/10 cursor-pointer transition-all hover:-translate-y-1 flex flex-col justify-between space-y-4"
           >
             <div className="space-y-3">
@@ -108,14 +108,14 @@ export const Login: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center text-xs font-bold text-emerald-400 gap-1.5 group-hover:translate-x-1 transition-transform">
-              <span>Open Faculty Portal</span>
+              <span>Select Faculty Portal</span>
               <ArrowRight className="w-4 h-4" />
             </div>
           </div>
 
           {/* HOD Portal Card */}
           <div
-            onClick={() => navigate('/login/hod')}
+            onClick={() => handleQuickFill('admin@college.com', 'admin')}
             className="group bg-slate-900/90 border border-slate-800 hover:border-indigo-500/50 rounded-3xl p-5 shadow-xl hover:shadow-indigo-500/10 cursor-pointer transition-all hover:-translate-y-1 flex flex-col justify-between space-y-4"
           >
             <div className="space-y-3">
@@ -132,14 +132,14 @@ export const Login: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center text-xs font-bold text-indigo-400 gap-1.5 group-hover:translate-x-1 transition-transform">
-              <span>Open HOD Portal</span>
+              <span>Select HOD Portal</span>
               <ArrowRight className="w-4 h-4" />
             </div>
           </div>
 
           {/* Admin Portal Card */}
           <div
-            onClick={() => navigate('/login/admin')}
+            onClick={() => handleQuickFill('admin@college.com', 'admin')}
             className="group bg-slate-900/90 border border-slate-800 hover:border-purple-500/50 rounded-3xl p-5 shadow-xl hover:shadow-purple-500/10 cursor-pointer transition-all hover:-translate-y-1 flex flex-col justify-between space-y-4"
           >
             <div className="space-y-3">
@@ -156,7 +156,7 @@ export const Login: React.FC = () => {
               </div>
             </div>
             <div className="flex items-center text-xs font-bold text-purple-400 gap-1.5 group-hover:translate-x-1 transition-transform">
-              <span>Open Admin Hub</span>
+              <span>Select Admin Hub</span>
               <ArrowRight className="w-4 h-4" />
             </div>
           </div>
