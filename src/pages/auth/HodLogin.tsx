@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { GraduationCap, Eye, EyeOff, Lock, ArrowRight, ShieldCheck, Layers } from 'lucide-react';
+import { Eye, EyeOff, Lock, ArrowRight, ShieldCheck, Layers } from 'lucide-react';
 
 export const HodLogin: React.FC = () => {
   const navigate = useNavigate();
@@ -22,19 +22,18 @@ export const HodLogin: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    let loginEmail = identifier;
-    if (!identifier.includes('@')) {
-      loginEmail = 'hod.cs@college.com';
-    }
-
-    const success = await login(loginEmail, 'hod');
+    const res = await login(identifier, 'hod', password);
     setIsSubmitting(false);
 
-    if (success) {
+    const isSuccess = typeof res === 'boolean' ? res : res.success;
+    const actualRole = typeof res === 'boolean' ? 'hod' : (res.actualRole || 'hod');
+    const errorMsg = typeof res === 'boolean' ? 'Invalid credentials.' : (res.error || 'Authentication failed.');
+
+    if (isSuccess) {
       showToast('HOD Login Successful', 'Welcome to Head of Department Portal!', 'success');
-      navigate('/hod/dashboard');
+      navigate(`/${actualRole}/dashboard`);
     } else {
-      showToast('Authentication Failed', 'Invalid HOD credentials.', 'error');
+      showToast('Authentication Failed', errorMsg, 'error');
     }
   };
 

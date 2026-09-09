@@ -101,6 +101,72 @@ export const dbService = {
     return getStorageData('profiles', INITIAL_PROFILES);
   },
 
+  async getProfileById(id: string): Promise<UserProfile | null> {
+    if (!id) return null;
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
+      if (error || !data) return null;
+      return data as UserProfile;
+    }
+    const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
+    return profiles.find(p => p.id === id) || null;
+  },
+
+  async getProfileByEmail(email: string): Promise<UserProfile | null> {
+    if (!email) return null;
+    const cleanEmail = email.trim().toLowerCase();
+    if (isRealSupabaseConfigured()) {
+      const { data, error } = await supabase.from('profiles').select('*').ilike('email', cleanEmail).maybeSingle();
+      if (error || !data) return null;
+      return data as UserProfile;
+    }
+    const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
+    return profiles.find(p => p.email && p.email.toLowerCase() === cleanEmail) || null;
+  },
+
+  async getProfileByIdentifier(identifier: string): Promise<UserProfile | null> {
+    if (!identifier) return null;
+    const input = identifier.trim();
+
+    // 1. Check if email
+    if (input.includes('@')) {
+      return await this.getProfileByEmail(input);
+    }
+
+    // 2. Check student roll number or student ID code
+    const students = await this.getStudents(true);
+    const matchedStudent = students.find(
+      s => (s.roll_number && s.roll_number.toLowerCase() === input.toLowerCase()) ||
+           (s.student_id_code && s.student_id_code.toLowerCase() === input.toLowerCase())
+    );
+    if (matchedStudent && matchedStudent.profile_id) {
+      const p = await this.getProfileById(matchedStudent.profile_id);
+      if (p) return p;
+    }
+
+    // 3. Check teacher ID code
+    const teachers = await this.getTeachers(true);
+    const matchedTeacher = teachers.find(
+      t => t.teacher_id_code && t.teacher_id_code.toLowerCase() === input.toLowerCase()
+    );
+    if (matchedTeacher && matchedTeacher.profile_id) {
+      const p = await this.getProfileById(matchedTeacher.profile_id);
+      if (p) return p;
+    }
+
+    // 4. Check HOD ID code
+    const hods = await this.getHODs();
+    const matchedHod = hods.find(
+      h => h.hod_id_code && h.hod_id_code.toLowerCase() === input.toLowerCase()
+    );
+    if (matchedHod && matchedHod.profile_id) {
+      const p = await this.getProfileById(matchedHod.profile_id);
+      if (p) return p;
+    }
+
+    return null;
+  },
+
   async updateProfile(id: string, updates: Partial<UserProfile>): Promise<UserProfile> {
     if (isRealSupabaseConfigured()) {
       const { data, error } = await supabase.from('profiles').update(updates).eq('id', id).select().single();

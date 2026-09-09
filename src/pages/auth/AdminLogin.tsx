@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
-import { GraduationCap, Eye, EyeOff, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
+import { Eye, EyeOff, Lock, ArrowRight, ShieldCheck } from 'lucide-react';
 
 export const AdminLogin: React.FC = () => {
   const navigate = useNavigate();
@@ -22,19 +22,18 @@ export const AdminLogin: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    let loginEmail = identifier;
-    if (!identifier.includes('@')) {
-      loginEmail = 'admin@college.com';
-    }
-
-    const success = await login(loginEmail, 'admin');
+    const res = await login(identifier, 'admin', password);
     setIsSubmitting(false);
 
-    if (success) {
+    const isSuccess = typeof res === 'boolean' ? res : res.success;
+    const actualRole = typeof res === 'boolean' ? 'admin' : (res.actualRole || 'admin');
+    const errorMsg = typeof res === 'boolean' ? 'Invalid credentials.' : (res.error || 'Authentication failed.');
+
+    if (isSuccess) {
       showToast('Admin Login Successful', 'Welcome to Institutional Admin Control Center!', 'success');
-      navigate('/admin/dashboard');
+      navigate(`/${actualRole}/dashboard`);
     } else {
-      showToast('Authentication Failed', 'Invalid administrator credentials.', 'error');
+      showToast('Authentication Failed', errorMsg, 'error');
     }
   };
 

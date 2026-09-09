@@ -22,19 +22,18 @@ export const TeacherLogin: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    let loginEmail = identifier;
-    if (!identifier.includes('@')) {
-      loginEmail = 'teacher1@college.com';
-    }
-
-    const success = await login(loginEmail, 'teacher');
+    const res = await login(identifier, 'teacher', password);
     setIsSubmitting(false);
 
-    if (success) {
+    const isSuccess = typeof res === 'boolean' ? res : res.success;
+    const actualRole = typeof res === 'boolean' ? 'teacher' : (res.actualRole || 'teacher');
+    const errorMsg = typeof res === 'boolean' ? 'Invalid credentials.' : (res.error || 'Authentication failed.');
+
+    if (isSuccess) {
       showToast('Faculty Login Successful', 'Welcome to Faculty Portal!', 'success');
-      navigate('/teacher/dashboard');
+      navigate(`/${actualRole}/dashboard`);
     } else {
-      showToast('Authentication Failed', 'Invalid teacher credentials.', 'error');
+      showToast('Authentication Failed', errorMsg, 'error');
     }
   };
 

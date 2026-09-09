@@ -24,17 +24,18 @@ export const Login: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const success = await login(email, selectedRole);
+    const res = await login(email, selectedRole, password);
     setIsSubmitting(false);
 
-    if (success) {
+    const isSuccess = typeof res === 'boolean' ? res : res.success;
+    const actualRole = typeof res === 'boolean' ? selectedRole : (res.actualRole || selectedRole);
+    const errorMsg = typeof res === 'boolean' ? 'Invalid credentials.' : (res.error || 'Authentication failed.');
+
+    if (isSuccess) {
       showToast('Login Successful', 'Welcome to the portal!', 'success');
-      if (email.includes('admin') || selectedRole === 'admin') navigate('/admin/dashboard');
-      else if (email.includes('hod') || selectedRole === 'hod') navigate('/hod/dashboard');
-      else if (email.includes('teacher') || selectedRole === 'teacher') navigate('/teacher/dashboard');
-      else navigate('/student/dashboard');
+      navigate(`/${actualRole}/dashboard`);
     } else {
-      showToast('Authentication Failed', 'Invalid credentials or user record not found.', 'error');
+      showToast('Authentication Failed', errorMsg, 'error');
     }
   };
 
@@ -210,11 +211,11 @@ export const Login: React.FC = () => {
 
           <form onSubmit={handleSubmit} className="space-y-3">
             <div className="space-y-1">
-              <label className="text-[11px] font-semibold text-slate-300">Email Address</label>
+              <label className="text-[11px] font-semibold text-slate-300">Email Address or ID</label>
               <div className="relative">
                 <Mail className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
                 <input
-                  type="email"
+                  type="text"
                   required
                   value={email}
                   onChange={e => setEmail(e.target.value)}
