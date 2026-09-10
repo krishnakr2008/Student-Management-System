@@ -113,13 +113,12 @@ export const dbService = {
     if (isRealSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.from('profiles').select('*');
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
           return data as UserProfile[];
         }
       } catch (e) {
-        console.warn('Supabase getProfiles query error, using local/demo profiles:', e);
+        console.warn('Supabase getProfiles query error:', e);
       }
-      return getStorageData('profiles', INITIAL_PROFILES);
     }
     return getStorageData('profiles', INITIAL_PROFILES);
   },
@@ -150,7 +149,6 @@ export const dbService = {
       } catch (e) {
         console.warn('Supabase getProfileByEmail error:', e);
       }
-      // Fallback to INITIAL_PROFILES strictly by exact matching email
       const demoMatch = INITIAL_PROFILES.find(p => p && p.email && p.email.trim().toLowerCase() === cleanEmail);
       return demoMatch || null;
     }
@@ -164,12 +162,10 @@ export const dbService = {
     if (!identifier) return null;
     const input = identifier.trim().toLowerCase();
 
-    // 1. Check if email
     if (input.includes('@')) {
       return await this.getProfileByEmail(input);
     }
 
-    // 2. Check student roll number or student ID code
     try {
       const students = await this.getStudents(true);
       const matchedStudent = students.find(
@@ -184,7 +180,6 @@ export const dbService = {
       console.warn('Error checking student identifier:', e);
     }
 
-    // 3. Check teacher ID code
     try {
       const teachers = await this.getTeachers(true);
       const matchedTeacher = teachers.find(
@@ -198,7 +193,6 @@ export const dbService = {
       console.warn('Error checking teacher identifier:', e);
     }
 
-    // 4. Check HOD ID code
     try {
       const hods = await this.getHODs();
       const matchedHod = hods.find(
@@ -212,7 +206,6 @@ export const dbService = {
       console.warn('Error checking HOD identifier:', e);
     }
 
-    // 5. Direct email match fallback on INITIAL_PROFILES
     const demoMatch = INITIAL_PROFILES.find(
       p => p && p.email && p.email.trim().toLowerCase() === input
     );
@@ -246,7 +239,7 @@ export const dbService = {
           query = query.eq('active', true);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) return data as Student[];
+        if (!error && data) return data as Student[];
       } catch (e) {
         console.warn('Supabase getStudents warning:', e);
       }
@@ -270,42 +263,38 @@ export const dbService = {
     const newStudent: Student = { ...studentData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
 
     if (isRealSupabaseConfigured()) {
-      try {
-        const { error: pErr } = await supabase.from('profiles').upsert({
-          id: newProfileId,
-          full_name: profileData.full_name,
-          email: profileData.email,
-          role: 'student',
-          phone: profileData.phone || null,
-          gender: profileData.gender || null,
-          dob: profileData.dob || null,
-          address: profileData.address || null,
-          avatar_url: profileData.avatar_url || null,
-          created_at: newProfile.created_at,
-          updated_at: newProfile.created_at,
-        });
-        if (pErr) console.warn('Supabase profiles upsert warning:', pErr.message);
+      const { error: pErr } = await supabase.from('profiles').upsert({
+        id: newProfileId,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        role: 'student',
+        phone: profileData.phone || null,
+        gender: profileData.gender || null,
+        dob: profileData.dob || null,
+        address: profileData.address || null,
+        avatar_url: profileData.avatar_url || null,
+        created_at: newProfile.created_at,
+        updated_at: newProfile.created_at,
+      });
+      if (pErr) throw new Error(`Profiles creation failed: ${pErr.message}`);
 
-        const { error: sErr } = await supabase.from('students').insert({
-          id: newId,
-          profile_id: newProfileId,
-          student_id_code: studentData.student_id_code,
-          course_id: isValidUUID(studentData.course_id) ? studentData.course_id : null,
-          department: studentData.department,
-          branch: studentData.branch,
-          semester: studentData.semester,
-          section: studentData.section,
-          roll_number: studentData.roll_number,
-          admission_year: studentData.admission_year,
-          guardian_name: studentData.guardian_name || null,
-          guardian_phone: studentData.guardian_phone || null,
-          guardian_relation: studentData.guardian_relation || null,
-          active: true,
-        });
-        if (sErr) console.warn('Supabase students insert warning:', sErr.message);
-      } catch (err: any) {
-        console.warn('Supabase createStudent exception:', err?.message || err);
-      }
+      const { error: sErr } = await supabase.from('students').insert({
+        id: newId,
+        profile_id: newProfileId,
+        student_id_code: studentData.student_id_code,
+        course_id: isValidUUID(studentData.course_id) ? studentData.course_id : null,
+        department: studentData.department,
+        branch: studentData.branch,
+        semester: studentData.semester,
+        section: studentData.section,
+        roll_number: studentData.roll_number,
+        admission_year: studentData.admission_year,
+        guardian_name: studentData.guardian_name || null,
+        guardian_phone: studentData.guardian_phone || null,
+        guardian_relation: studentData.guardian_relation || null,
+        active: true,
+      });
+      if (sErr) throw new Error(`Student registration failed: ${sErr.message}`);
     }
 
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
@@ -347,7 +336,6 @@ export const dbService = {
   },
 
   async deleteStudent(id: string): Promise<boolean> {
-    // Soft Delete to preserve historical attendance & grade integrity
     const students = getStorageData<Student[]>('students', INITIAL_STUDENTS);
     const index = students.findIndex(s => s.id === id);
     if (index !== -1) {
@@ -371,7 +359,7 @@ export const dbService = {
           query = query.eq('active', true);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) return data as Teacher[];
+        if (!error && data) return data as Teacher[];
       } catch (e) {
         console.warn('Supabase getTeachers warning:', e);
       }
@@ -392,34 +380,30 @@ export const dbService = {
     const newTeacher: Teacher = { ...teacherData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
 
     if (isRealSupabaseConfigured()) {
-      try {
-        const { error: pErr } = await supabase.from('profiles').upsert({
-          id: newProfileId,
-          full_name: profileData.full_name,
-          email: profileData.email,
-          role: 'teacher',
-          phone: profileData.phone || null,
-          gender: profileData.gender || null,
-          dob: profileData.dob || null,
-          address: profileData.address || null,
-          avatar_url: profileData.avatar_url || null,
-          created_at: newProfile.created_at,
-          updated_at: newProfile.created_at,
-        });
-        if (pErr) console.warn('Supabase profiles upsert warning:', pErr.message);
+      const { error: pErr } = await supabase.from('profiles').upsert({
+        id: newProfileId,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        role: 'teacher',
+        phone: profileData.phone || null,
+        gender: profileData.gender || null,
+        dob: profileData.dob || null,
+        address: profileData.address || null,
+        avatar_url: profileData.avatar_url || null,
+        created_at: newProfile.created_at,
+        updated_at: newProfile.created_at,
+      });
+      if (pErr) throw new Error(`Profiles creation failed: ${pErr.message}`);
 
-        const { error: tErr } = await supabase.from('teachers').insert({
-          id: newId,
-          profile_id: newProfileId,
-          teacher_id_code: teacherData.teacher_id_code,
-          department: teacherData.department,
-          designation: teacherData.designation,
-          active: true,
-        });
-        if (tErr) console.warn('Supabase teachers insert warning:', tErr.message);
-      } catch (err: any) {
-        console.warn('Supabase createTeacher exception:', err?.message || err);
-      }
+      const { error: tErr } = await supabase.from('teachers').insert({
+        id: newId,
+        profile_id: newProfileId,
+        teacher_id_code: teacherData.teacher_id_code,
+        department: teacherData.department,
+        designation: teacherData.designation,
+        active: true,
+      });
+      if (tErr) throw new Error(`Teacher creation failed: ${tErr.message}`);
     }
 
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
@@ -484,7 +468,7 @@ export const dbService = {
           query = query.eq('active', true);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) return data as Course[];
+        if (!error && data) return data as Course[];
       } catch (e) {
         console.warn('Supabase getCourses warning:', e);
       }
@@ -499,11 +483,21 @@ export const dbService = {
       throw new Error(`Course code "${course.code}" already exists.`);
     }
 
-    const newCourse: Course = { ...course, id: `course-${Date.now()}`, active: true, student_count: 0 };
+    const generatedId = generateUUID();
+    const newCourse: Course = { ...course, id: generatedId, active: true, student_count: 0 };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('courses').insert(newCourse);
-      if (error) throw new Error(error.message);
+      const { error } = await supabase.from('courses').insert({
+        id: generatedId,
+        code: course.code,
+        name: course.name,
+        department: course.department,
+        description: course.description || null,
+        duration_years: course.duration_years || 4,
+        total_semesters: course.total_semesters || 8,
+        active: true,
+      });
+      if (error) throw new Error(`Course creation failed: ${error.message}`);
     }
 
     const courses = getStorageData<Course[]>('courses', INITIAL_COURSES);
@@ -521,7 +515,7 @@ export const dbService = {
       setStorageData('courses', courses);
     }
 
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('courses').update({ active: false }).eq('id', id);
       if (error) throw new Error(error.message);
     }
@@ -536,7 +530,7 @@ export const dbService = {
           query = query.eq('active', true);
         }
         const { data, error } = await query;
-        if (!error && data && data.length > 0) return data as Subject[];
+        if (!error && data) return data as Subject[];
       } catch (e) {
         console.warn('Supabase getSubjects warning:', e);
       }
@@ -551,11 +545,21 @@ export const dbService = {
       throw new Error(`Subject code "${subject.code}" already exists.`);
     }
 
-    const newSubj: Subject = { ...subject, id: `subj-${Date.now()}`, active: true };
+    const generatedId = generateUUID();
+    const newSubj: Subject = { ...subject, id: generatedId, active: true };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('subjects').insert(newSubj);
-      if (error) throw new Error(error.message);
+      const { error } = await supabase.from('subjects').insert({
+        id: generatedId,
+        code: subject.code,
+        name: subject.name,
+        credits: subject.credits || 4,
+        course_id: isValidUUID(subject.course_id) ? subject.course_id : null,
+        semester: subject.semester || 1,
+        teacher_id: isValidUUID(subject.teacher_id) ? subject.teacher_id : null,
+        active: true,
+      });
+      if (error) throw new Error(`Subject creation failed: ${error.message}`);
     }
 
     const subjects = getStorageData<Subject[]>('subjects', INITIAL_SUBJECTS);
@@ -573,7 +577,7 @@ export const dbService = {
       setStorageData('subjects', subjects);
     }
 
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('subjects').update({ active: false }).eq('id', id);
       if (error) throw new Error(error.message);
     }
@@ -1124,11 +1128,24 @@ export const dbService = {
   },
 
   async createExam(exam: Omit<Exam, 'id'>): Promise<Exam> {
-    const newExam: Exam = { ...exam, id: `exam-${Date.now()}` };
+    const generatedId = generateUUID();
+    const newExam: Exam = { ...exam, id: generatedId };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('exams').insert(newExam);
-      if (error) throw new Error(error.message);
+      const { error } = await supabase.from('exams').insert({
+        id: generatedId,
+        name: exam.name,
+        subject_id: isValidUUID(exam.subject_id) ? exam.subject_id : null,
+        teacher_id: isValidUUID(exam.teacher_id) ? exam.teacher_id : null,
+        exam_type: exam.exam_type,
+        exam_date: exam.exam_date,
+        start_time: exam.start_time,
+        end_time: exam.end_time,
+        room: exam.room,
+        instructions: exam.instructions || null,
+        max_marks: exam.max_marks || 100,
+      });
+      if (error) throw new Error(`Exam creation failed: ${error.message}`);
     }
 
     const all = getStorageData<Exam[]>('exams', INITIAL_EXAMS);
@@ -1138,7 +1155,7 @@ export const dbService = {
   },
 
   async deleteExam(id: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('exams').delete().eq('id', id);
       if (error) throw new Error(error.message);
     }
@@ -1165,17 +1182,17 @@ export const dbService = {
     if (isRealSupabaseConfigured()) {
       try {
         let query = supabase.from('timetable').select('*');
-        if (filters?.course_id) query = query.eq('course_id', filters.course_id);
+        if (filters?.course_id && isValidUUID(filters.course_id)) query = query.eq('course_id', filters.course_id);
         if (filters?.semester) query = query.eq('semester', filters.semester);
         if (filters?.section) query = query.eq('section', filters.section);
-        if (filters?.teacher_id) query = query.eq('teacher_id', filters.teacher_id);
-        if (filters?.subject_id) query = query.eq('subject_id', filters.subject_id);
+        if (filters?.teacher_id && isValidUUID(filters.teacher_id)) query = query.eq('teacher_id', filters.teacher_id);
+        if (filters?.subject_id && isValidUUID(filters.subject_id)) query = query.eq('subject_id', filters.subject_id);
         if (filters?.day) query = query.eq('day', filters.day);
         if (filters?.room) query = query.eq('room', filters.room);
         if (filters?.status) query = query.eq('status', filters.status);
 
         const { data, error } = await query;
-        if (!error && data && data.length > 0) {
+        if (!error && data) {
           all = data as TimetableSlot[];
         } else {
           all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
@@ -1203,7 +1220,6 @@ export const dbService = {
   async createTimetableSlot(slotData: Omit<TimetableSlot, 'id'>, userId?: string): Promise<TimetableSlot> {
     const existingSlots = await this.getTimetable();
 
-    // Helper: Convert "09:30" or "09:30:00" to total minutes
     const timeToMin = (t: string) => {
       if (!t) return 0;
       const parts = t.split(':').map(Number);
@@ -1217,7 +1233,6 @@ export const dbService = {
       throw new Error('Start time must be before end time.');
     }
 
-    // CONFLICT DETECTION
     for (const slot of existingSlots) {
       if (slot.day !== slotData.day) continue;
       if (slot.status === 'Cancelled') continue;
@@ -1228,21 +1243,18 @@ export const dbService = {
       const isOverlap = newStart < existEnd && newEnd > existStart;
       if (!isOverlap) continue;
 
-      // 1. Teacher Collision
       if (slotData.teacher_id && slot.teacher_id === slotData.teacher_id) {
         throw new Error(
           `Timetable Conflict: Instructor "${slot.teacher_name || 'Teacher'}" is already scheduled to teach "${slot.subject_name}" in ${slot.room} on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
         );
       }
 
-      // 2. Room Collision
       if (slotData.room && slot.room.toLowerCase().trim() === slotData.room.toLowerCase().trim()) {
         throw new Error(
           `Timetable Conflict: Room/Venue "${slot.room}" is already reserved for "${slot.subject_name}" (${slot.course_name || 'Class'}) on ${slot.day} during ${slot.start_time} - ${slot.end_time}.`
         );
       }
 
-      // 3. Section Collision
       if (
         slotData.course_id &&
         slot.course_id === slotData.course_id &&
@@ -1255,30 +1267,42 @@ export const dbService = {
       }
     }
 
+    const generatedId = generateUUID();
+    const validUserId = isValidUUID(userId) ? userId : undefined;
+
     const newSlot: TimetableSlot = {
       ...slotData,
-      id: `tt-${Date.now()}`,
+      id: generatedId,
       status: slotData.status || 'Published',
-      created_by: userId,
+      created_by: validUserId,
       created_at: new Date().toISOString(),
     };
 
     if (isRealSupabaseConfigured()) {
-      try {
-        const { error } = await supabase.from('timetable').insert(newSlot);
-        if (error) console.error('Supabase create timetable error:', error.message);
-      } catch (e) {
-        console.error('Supabase insert exception:', e);
-      }
+      const { error } = await supabase.from('timetable').insert({
+        id: generatedId,
+        course_id: isValidUUID(slotData.course_id) ? slotData.course_id : null,
+        course_name: slotData.course_name || null,
+        semester: slotData.semester || 1,
+        section: slotData.section || 'A',
+        day: slotData.day,
+        start_time: slotData.start_time,
+        end_time: slotData.end_time,
+        subject_id: isValidUUID(slotData.subject_id) ? slotData.subject_id : null,
+        subject_name: slotData.subject_name || null,
+        subject_code: slotData.subject_code || null,
+        teacher_id: isValidUUID(slotData.teacher_id) ? slotData.teacher_id : null,
+        teacher_name: slotData.teacher_name || null,
+        room: slotData.room,
+        type: slotData.type || 'Lecture',
+        status: slotData.status || 'Published',
+        created_by: validUserId || null,
+      });
+      if (error) throw new Error(`Timetable creation failed: ${error.message}`);
     }
 
     const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
-    const existingIdx = all.findIndex(s => s.id === newSlot.id);
-    if (existingIdx !== -1) {
-      all[existingIdx] = newSlot;
-    } else {
-      all.push(newSlot);
-    }
+    all.push(newSlot);
     setStorageData('timetable', all);
 
     return newSlot;
@@ -1309,7 +1333,6 @@ export const dbService = {
       throw new Error('Start time must be before end time.');
     }
 
-    // CONFLICT DETECTION (excluding current record)
     for (const slot of existingSlots) {
       if (slot.id === id) continue;
       if (slot.day !== targetSlot.day) continue;
@@ -1345,19 +1368,34 @@ export const dbService = {
       }
     }
 
+    const validUserId = isValidUUID(userId) ? userId : undefined;
     const updatedSlot: TimetableSlot = {
       ...targetSlot,
-      updated_by: userId,
+      updated_by: validUserId,
       updated_at: new Date().toISOString(),
     };
 
-    if (isRealSupabaseConfigured()) {
-      try {
-        const { error } = await supabase.from('timetable').update(updatedSlot).eq('id', id);
-        if (error) console.error('Supabase update timetable error:', error.message);
-      } catch (e) {
-        console.error('Supabase update exception:', e);
-      }
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
+      const { error } = await supabase.from('timetable').update({
+        course_id: isValidUUID(updatedSlot.course_id) ? updatedSlot.course_id : null,
+        course_name: updatedSlot.course_name || null,
+        semester: updatedSlot.semester || 1,
+        section: updatedSlot.section || 'A',
+        day: updatedSlot.day,
+        start_time: updatedSlot.start_time,
+        end_time: updatedSlot.end_time,
+        subject_id: isValidUUID(updatedSlot.subject_id) ? updatedSlot.subject_id : null,
+        subject_name: updatedSlot.subject_name || null,
+        subject_code: updatedSlot.subject_code || null,
+        teacher_id: isValidUUID(updatedSlot.teacher_id) ? updatedSlot.teacher_id : null,
+        teacher_name: updatedSlot.teacher_name || null,
+        room: updatedSlot.room,
+        type: updatedSlot.type || 'Lecture',
+        status: updatedSlot.status || 'Published',
+        updated_by: validUserId || null,
+        updated_at: updatedSlot.updated_at,
+      }).eq('id', id);
+      if (error) throw new Error(`Timetable update failed: ${error.message}`);
     }
 
     const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
@@ -1373,13 +1411,9 @@ export const dbService = {
   },
 
   async deleteTimetableSlot(id: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
-      try {
-        const { error } = await supabase.from('timetable').delete().eq('id', id);
-        if (error) console.error('Supabase delete error:', error.message);
-      } catch (e) {
-        console.error('Supabase delete exception:', e);
-      }
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
+      const { error } = await supabase.from('timetable').delete().eq('id', id);
+      if (error) throw new Error(error.message);
     }
 
     const all = getStorageData<TimetableSlot[]>('timetable', INITIAL_TIMETABLE);
@@ -1393,7 +1427,7 @@ export const dbService = {
     if (isRealSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.from('notices').select('*').order('created_at', { ascending: false });
-        if (!error && data && data.length > 0) return data as Notice[];
+        if (!error && data) return data as Notice[];
       } catch (e) {
         console.warn('Supabase getNotices warning:', e);
       }
@@ -1402,17 +1436,29 @@ export const dbService = {
   },
 
   async createNotice(notice: Omit<Notice, 'id' | 'publish_date'>): Promise<Notice> {
+    const generatedId = generateUUID();
     const newNotice: Notice = {
       ...notice,
-      id: `not-${Date.now()}`,
+      id: generatedId,
       publish_date: new Date().toISOString().split('T')[0],
       pinned: notice.pinned || false,
       archived: notice.archived || false,
     };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('notices').insert(newNotice);
-      if (error) throw new Error(error.message);
+      const { error } = await supabase.from('notices').insert({
+        id: generatedId,
+        title: notice.title,
+        description: notice.description,
+        category: notice.category || 'General',
+        priority: notice.priority || 'Normal',
+        publish_date: newNotice.publish_date,
+        expiry_date: notice.expiry_date || null,
+        created_by: isValidUUID(notice.created_by) ? notice.created_by : null,
+        pinned: newNotice.pinned,
+        archived: newNotice.archived,
+      });
+      if (error) throw new Error(`Notice creation failed: ${error.message}`);
     }
 
     const all = getStorageData<Notice[]>('notices', INITIAL_NOTICES);
@@ -1422,7 +1468,7 @@ export const dbService = {
   },
 
   async deleteNotice(id: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('notices').delete().eq('id', id);
       if (error) throw new Error(error.message);
     }
@@ -1438,7 +1484,7 @@ export const dbService = {
     if (isRealSupabaseConfigured()) {
       try {
         const { data, error } = await supabase.from('events').select('*');
-        if (!error && data && data.length > 0) return data as CollegeEvent[];
+        if (!error && data) return data as CollegeEvent[];
       } catch (e) {
         console.warn('Supabase getEvents warning:', e);
       }
@@ -1447,11 +1493,20 @@ export const dbService = {
   },
 
   async createEvent(event: Omit<CollegeEvent, 'id'>): Promise<CollegeEvent> {
-    const newEvt: CollegeEvent = { ...event, id: `evt-${Date.now()}` };
+    const generatedId = generateUUID();
+    const newEvt: CollegeEvent = { ...event, id: generatedId };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('events').insert(newEvt);
-      if (error) throw new Error(error.message);
+      const { error } = await supabase.from('events').insert({
+        id: generatedId,
+        title: event.title,
+        description: event.description,
+        event_type: event.event_type,
+        start_date: event.start_date,
+        end_date: event.end_date,
+        location: event.location,
+      });
+      if (error) throw new Error(`Event creation failed: ${error.message}`);
     }
 
     const all = getStorageData<CollegeEvent[]>('events', INITIAL_EVENTS);
@@ -1461,7 +1516,7 @@ export const dbService = {
   },
 
   async deleteEvent(id: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('events').delete().eq('id', id);
       if (error) throw new Error(error.message);
     }
@@ -1718,9 +1773,12 @@ export const dbService = {
   // HOD MODULE
   async getHODs(): Promise<HODInfo[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('hods').select('*, profile:profiles(*)');
-      if (error) return getStorageData('hods', INITIAL_HODS);
-      return data as HODInfo[];
+      try {
+        const { data, error } = await supabase.from('hods').select('*, profile:profiles(*)');
+        if (!error && data) return data as HODInfo[];
+      } catch (e) {
+        console.warn('Supabase getHODs warning:', e);
+      }
     }
     return getStorageData('hods', INITIAL_HODS);
   },
@@ -1738,9 +1796,12 @@ export const dbService = {
   // FEES MODULE
   async getFees(): Promise<FeeRecord[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('fees').select('*');
-      if (error) return getStorageData('fees', INITIAL_FEES);
-      return data as FeeRecord[];
+      try {
+        const { data, error } = await supabase.from('fees').select('*');
+        if (!error && data) return data as FeeRecord[];
+      } catch (e) {
+        console.warn('Supabase getFees warning:', e);
+      }
     }
     return getStorageData('fees', INITIAL_FEES);
   },

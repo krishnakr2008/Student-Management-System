@@ -298,6 +298,15 @@ CREATE TABLE IF NOT EXISTS public.fees (
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
 );
 
+-- 20. HODS
+CREATE TABLE IF NOT EXISTS public.hods (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    profile_id UUID UNIQUE NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    hod_id_code TEXT UNIQUE NOT NULL,
+    department TEXT NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()) NOT NULL
+);
+
 -- ====================================================
 -- ROW LEVEL SECURITY (RLS) POLICIES
 -- ====================================================
@@ -320,12 +329,21 @@ ALTER TABLE public.certificates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.resumes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.notifications ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.fees ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.hods ENABLE ROW LEVEL SECURITY;
 
 -- Helper Function: Check Admin
 CREATE OR REPLACE FUNCTION public.is_admin()
 RETURNS BOOLEAN AS $$
 BEGIN
   RETURN EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin');
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
+
+-- Helper Function: Check HOD Authority
+CREATE OR REPLACE FUNCTION public.is_hod()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('hod', 'admin'));
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
@@ -337,107 +355,28 @@ BEGIN
     SELECT 1 FROM public.teacher_subjects ts
     JOIN public.teachers t ON t.id = ts.teacher_id
     WHERE t.profile_id = auth.uid() AND ts.subject_id = sub_id
-  ) OR public.is_admin();
+  ) OR public.is_admin() OR public.is_hod();
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- ADMIN FULL ACCESS POLICIES WITH EXPLICIT CHECK CLAUSES
-CREATE POLICY "Admin full access profiles" ON public.profiles FOR ALL 
-  USING (public.is_admin() OR auth.uid() = id)
-  WITH CHECK (public.is_admin() OR auth.uid() = id);
-
-CREATE POLICY "Admin full access students" ON public.students FOR ALL 
-  USING (public.is_admin() OR profile_id = auth.uid())
-  WITH CHECK (public.is_admin() OR profile_id = auth.uid());
-
-CREATE POLICY "Admin full access teachers" ON public.teachers FOR ALL 
-  USING (public.is_admin() OR profile_id = auth.uid())
-  WITH CHECK (public.is_admin() OR profile_id = auth.uid());
-
-CREATE POLICY "Admin full access courses" ON public.courses FOR ALL USING (true);
-CREATE POLICY "Admin full access subjects" ON public.subjects FOR ALL USING (true);
-CREATE POLICY "Admin full access teacher_subjects" ON public.teacher_subjects FOR ALL USING (true);
-CREATE POLICY "Admin full access student_subjects" ON public.student_subjects FOR ALL USING (true);
-
--- Helper Function: Check HOD Authority
-CREATE OR REPLACE FUNCTION public.is_hod()
-RETURNS BOOLEAN AS $$
-BEGIN
-  RETURN EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('hod', 'admin'));
-END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
-
--- CERTIFICATE VERIFICATION RLS POLICIES
-DROP POLICY IF EXISTS "Student insert own certificates" ON public.certificates;
-DROP POLICY IF EXISTS "Read certificates" ON public.certificates;
-DROP POLICY IF EXISTS "Admin verify certificates" ON public.certificates;
-DROP POLICY IF EXISTS "HOD and Admin verify certificates" ON public.certificates;
-
-CREATE POLICY "Student insert own certificates" ON public.certificates FOR INSERT 
-  WITH CHECK (
-    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR 
-    public.is_admin() OR 
-    public.is_hod() OR 
-    auth.role() = 'authenticated'
-  );
-
-CREATE POLICY "Read certificates" ON public.certificates FOR SELECT 
-  USING (
-    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR 
-    public.is_admin() OR 
-    public.is_hod() OR 
-    auth.role() = 'authenticated'
-  );
-
-CREATE POLICY "HOD and Admin verify certificates" ON public.certificates FOR UPDATE 
-  USING (
-    public.is_admin() OR public.is_hod() OR auth.role() = 'authenticated'
-  )
-  WITH CHECK (
-    public.is_admin() OR public.is_hod() OR auth.role() = 'authenticated'
-  );
-
--- TEACHER SUBJECT SCOPED POLICIES
-CREATE POLICY "Teacher read attendance" ON public.attendance FOR SELECT USING (
-    public.is_teacher_assigned_subject(subject_id) OR
-    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid())
-);
-
-CREATE POLICY "Teacher write attendance" ON public.attendance FOR INSERT WITH CHECK (
-    public.is_teacher_assigned_subject(subject_id)
-);
-
-CREATE POLICY "Teacher update attendance" ON public.attendance FOR UPDATE USING (
-    public.is_teacher_assigned_subject(subject_id)
-);
-
-CREATE POLICY "Teacher read marks" ON public.marks FOR SELECT USING (
-    public.is_teacher_assigned_subject(subject_id) OR
-    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid())
-);
-
-CREATE POLICY "Teacher write marks" ON public.marks FOR ALL USING (
-    public.is_teacher_assigned_subject(subject_id)
-);
-
-CREATE POLICY "Teacher manage assignments" ON public.assignments FOR ALL 
-  USING (
-    public.is_teacher_assigned_subject(subject_id) OR 
-    public.is_admin() OR 
-    teacher_id IN (SELECT id FROM public.teachers WHERE profile_id = auth.uid()) OR
-    auth.role() = 'authenticated'
-  )
-  WITH CHECK (
-    public.is_teacher_assigned_subject(subject_id) OR 
-    public.is_admin() OR 
-    teacher_id IN (SELECT id FROM public.teachers WHERE profile_id = auth.uid()) OR
-    auth.role() = 'authenticated'
-  );
-
-CREATE POLICY "Submissions access policy" ON public.assignment_submissions FOR ALL 
-  USING (true)
-  WITH CHECK (true);
-
-CREATE POLICY "Teacher manage exams" ON public.exams FOR ALL USING (
-    public.is_teacher_assigned_subject(subject_id) OR public.is_admin() OR auth.role() = 'authenticated'
-);
+-- RLS POLICIES FOR ALL TABLES (AUTHENTICATED & ROLE ACCESS)
+CREATE POLICY "Authenticated full access profiles" ON public.profiles FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access students" ON public.students FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access teachers" ON public.teachers FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access courses" ON public.courses FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access subjects" ON public.subjects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access teacher_subjects" ON public.teacher_subjects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access student_subjects" ON public.student_subjects FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access attendance" ON public.attendance FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access marks" ON public.marks FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access assignments" ON public.assignments FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access assignment_submissions" ON public.assignment_submissions FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access exams" ON public.exams FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access timetable" ON public.timetable FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access notices" ON public.notices FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access events" ON public.events FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access certificates" ON public.certificates FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access resumes" ON public.resumes FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access notifications" ON public.notifications FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access fees" ON public.fees FOR ALL USING (true) WITH CHECK (true);
+CREATE POLICY "Authenticated full access hods" ON public.hods FOR ALL USING (true) WITH CHECK (true);
