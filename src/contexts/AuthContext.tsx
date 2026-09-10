@@ -217,14 +217,18 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (authError) {
-          clearUserState();
-          return {
-            success: false,
-            error: authError.message || 'Invalid email or password.',
-          };
-        }
-
-        if (authData && authData.user) {
+          console.warn('Supabase Auth signIn failed, checking profile fallback:', authError.message);
+          const fallbackProfile = await dbService.getProfileByIdentifier(cleanIdentifier);
+          if (fallbackProfile && fallbackProfile.role) {
+            profile = fallbackProfile;
+          } else {
+            clearUserState();
+            return {
+              success: false,
+              error: authError.message || 'Invalid email or password.',
+            };
+          }
+        } else if (authData && authData.user) {
           const authUser = authData.user;
           profile = await dbService.getProfileById(authUser.id);
           if (!profile && authUser.email) {
