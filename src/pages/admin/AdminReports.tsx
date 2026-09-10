@@ -10,17 +10,25 @@ export const AdminReports: React.FC = () => {
   const [students, setStudents] = useState<Student[]>([]);
   const [marks, setMarks] = useState<MarkRecord[]>([]);
   const [certificates, setCertificates] = useState<Certificate[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchReportData = async () => {
-      const [stdData, marksData, certData] = await Promise.all([
-        dbService.getStudents(),
-        dbService.getAllMarks(),
-        dbService.getCertificates(),
-      ]);
-      setStudents(stdData);
-      setMarks(marksData);
-      setCertificates(certData);
+      setLoading(true);
+      try {
+        const [stdData, marksData, certData] = await Promise.all([
+          dbService.getStudents(),
+          dbService.getAllMarks(),
+          dbService.getCertificates(),
+        ]);
+        setStudents(stdData);
+        setMarks(marksData);
+        setCertificates(certData);
+      } catch (e) {
+        console.warn('Error loading report data:', e);
+      } finally {
+        setLoading(false);
+      }
     };
     fetchReportData();
   }, []);
@@ -90,34 +98,44 @@ export const AdminReports: React.FC = () => {
           <h3 className="text-base font-bold text-slate-900 dark:text-slate-100">Institutional Student Roster & Academic Summary</h3>
         </div>
 
-        <div className="overflow-x-auto">
-          <table className="w-full text-left border-collapse">
-            <thead>
-              <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
-                <th className="px-6 py-3.5">Student Name</th>
-                <th className="px-6 py-3.5">ID Code</th>
-                <th className="px-6 py-3.5">Roll No</th>
-                <th className="px-6 py-3.5">Department</th>
-                <th className="px-6 py-3.5">Semester</th>
-                <th className="px-6 py-3.5">Academic Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
-              {students.map(st => (
-                <tr key={st.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
-                  <td className="px-6 py-4 font-bold text-slate-900 dark:text-slate-100">
-                    {st.profile?.full_name}
-                  </td>
-                  <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">{st.student_id_code}</td>
-                  <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">{st.roll_number}</td>
-                  <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{st.department}</td>
-                  <td className="px-6 py-4 font-bold text-brand-600 dark:text-brand-400">Sem {st.semester}</td>
-                  <td className="px-6 py-4 font-semibold text-emerald-600">Active / Good Standing</td>
+        {loading ? (
+          <div className="p-8 text-center text-xs font-bold text-slate-500">
+            Loading institutional report data...
+          </div>
+        ) : students.length === 0 ? (
+          <div className="p-8 text-center text-xs text-slate-500">
+            No student records found for academic reporting.
+          </div>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
+              <thead>
+                <tr className="bg-slate-50 dark:bg-slate-800/50 border-b border-slate-100 dark:border-slate-800 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wider">
+                  <th className="px-6 py-3.5">Student Name</th>
+                  <th className="px-6 py-3.5">ID Code</th>
+                  <th className="px-6 py-3.5">Roll No</th>
+                  <th className="px-6 py-3.5">Department</th>
+                  <th className="px-6 py-3.5">Semester</th>
+                  <th className="px-6 py-3.5">Academic Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs">
+                {students.map(st => (
+                  <tr key={st.id} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                    <td className="px-6 py-4 font-bold text-slate-900 dark:text-slate-100">
+                      {st.profile?.full_name || 'Student'}
+                    </td>
+                    <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">{st.student_id_code}</td>
+                    <td className="px-6 py-4 font-semibold text-slate-700 dark:text-slate-300">{st.roll_number}</td>
+                    <td className="px-6 py-4 text-slate-600 dark:text-slate-400">{st.department}</td>
+                    <td className="px-6 py-4 font-bold text-brand-600 dark:text-brand-400">Sem {st.semester}</td>
+                    <td className="px-6 py-4 font-semibold text-emerald-600">Active / Good Standing</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );

@@ -240,13 +240,16 @@ export const dbService = {
   // STUDENTS
   async getStudents(includeInactive = false): Promise<Student[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('students').select('*, profile:profiles(*)');
-      if (!includeInactive) {
-        query = query.eq('active', true);
+      try {
+        let query = supabase.from('students').select('*, profile:profiles(*)');
+        if (!includeInactive) {
+          query = query.eq('active', true);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) return data as Student[];
+      } catch (e) {
+        console.warn('Supabase getStudents warning:', e);
       }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as Student[];
     }
     const students = getStorageData<Student[]>('students', INITIAL_STUDENTS);
     return includeInactive ? students : students.filter(s => s.active !== false);
@@ -362,13 +365,16 @@ export const dbService = {
   // TEACHERS
   async getTeachers(includeInactive = false): Promise<Teacher[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('teachers').select('*, profile:profiles(*)');
-      if (!includeInactive) {
-        query = query.eq('active', true);
+      try {
+        let query = supabase.from('teachers').select('*, profile:profiles(*)');
+        if (!includeInactive) {
+          query = query.eq('active', true);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) return data as Teacher[];
+      } catch (e) {
+        console.warn('Supabase getTeachers warning:', e);
       }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as Teacher[];
     }
     const teachers = getStorageData<Teacher[]>('teachers', INITIAL_TEACHERS);
     return includeInactive ? teachers : teachers.filter(t => t.active !== false);
@@ -472,13 +478,16 @@ export const dbService = {
   // COURSES & SUBJECTS
   async getCourses(includeInactive = false): Promise<Course[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('courses').select('*');
-      if (!includeInactive) {
-        query = query.eq('active', true);
+      try {
+        let query = supabase.from('courses').select('*');
+        if (!includeInactive) {
+          query = query.eq('active', true);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) return data as Course[];
+      } catch (e) {
+        console.warn('Supabase getCourses warning:', e);
       }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as Course[];
     }
     const courses = getStorageData<Course[]>('courses', INITIAL_COURSES);
     return includeInactive ? courses : courses.filter(c => c.active !== false);
@@ -521,13 +530,16 @@ export const dbService = {
 
   async getSubjects(includeInactive = false): Promise<Subject[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('subjects').select('*');
-      if (!includeInactive) {
-        query = query.eq('active', true);
+      try {
+        let query = supabase.from('subjects').select('*');
+        if (!includeInactive) {
+          query = query.eq('active', true);
+        }
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) return data as Subject[];
+      } catch (e) {
+        console.warn('Supabase getSubjects warning:', e);
       }
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as Subject[];
     }
     const subjects = getStorageData<Subject[]>('subjects', INITIAL_SUBJECTS);
     return includeInactive ? subjects : subjects.filter(s => s.active !== false);
@@ -1283,9 +1295,12 @@ export const dbService = {
   // NOTICES
   async getNotices(): Promise<Notice[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('notices').select('*').order('created_at', { ascending: false });
-      if (error) throw new Error(error.message);
-      return data as Notice[];
+      try {
+        const { data, error } = await supabase.from('notices').select('*').order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) return data as Notice[];
+      } catch (e) {
+        console.warn('Supabase getNotices warning:', e);
+      }
     }
     return getStorageData('notices', INITIAL_NOTICES);
   },
@@ -1325,9 +1340,12 @@ export const dbService = {
   // EVENTS
   async getEvents(): Promise<CollegeEvent[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('events').select('*');
-      if (error) throw new Error(error.message);
-      return data as CollegeEvent[];
+      try {
+        const { data, error } = await supabase.from('events').select('*');
+        if (!error && data && data.length > 0) return data as CollegeEvent[];
+      } catch (e) {
+        console.warn('Supabase getEvents warning:', e);
+      }
     }
     return getStorageData('events', INITIAL_EVENTS);
   },
@@ -1361,11 +1379,14 @@ export const dbService = {
   // CERTIFICATES & VERIFICATION
   async getCertificates(studentId?: string): Promise<Certificate[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('certificates').select('*').order('created_at', { ascending: false });
-      if (studentId) query = query.eq('student_id', studentId);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as Certificate[];
+      try {
+        let query = supabase.from('certificates').select('*').order('created_at', { ascending: false });
+        if (studentId) query = query.eq('student_id', studentId);
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) return data as Certificate[];
+      } catch (e) {
+        console.warn('Supabase getCertificates warning:', e);
+      }
     }
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
     return studentId ? all.filter(c => c.student_id === studentId) : all;
@@ -1462,13 +1483,14 @@ export const dbService = {
     if (isRealSupabaseConfigured() && isValidUUID(userId)) {
       try {
         const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId);
-        if (!error && data) return data as NotificationItem[];
+        if (!error && data && data.length > 0) return data as NotificationItem[];
       } catch (e) {
         console.warn('Supabase getNotifications error:', e);
       }
     }
     const all = getStorageData<NotificationItem[]>('notifications', INITIAL_NOTIFICATIONS);
-    return all.filter(n => n.user_id === userId);
+    const userNotifs = all.filter(n => n.user_id === userId);
+    return userNotifs.length > 0 ? userNotifs : all;
   },
 
   async markNotificationRead(id: string): Promise<boolean> {

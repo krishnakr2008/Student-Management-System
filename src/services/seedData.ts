@@ -596,14 +596,50 @@ export const INITIAL_TIMETABLE: TimetableSlot[] = [
 export const INITIAL_NOTICES: Notice[] = [
   {
     id: 'not-1',
-    title: 'Mid-Semester Datesheet Released by HOD',
-    description: 'The finalized mid-semester exam datesheet for CS & IT departments has been published by HOD Office.',
+    title: 'Mid-Semester Examination Schedule Released',
+    description: 'The finalized mid-semester exam datesheet for CS & IT departments has been published by HOD Office. Examinations commence on Oct 1, 2026.',
     category: 'Exam',
     priority: 'Urgent',
     publish_date: '2026-09-06',
     expiry_date: '2026-10-15',
-    author_name: 'HOD Office (admin@college.com)',
+    author_name: 'Dr. Robert Carter (HOD CS)',
     pinned: true,
+    archived: false,
+  },
+  {
+    id: 'not-2',
+    title: 'Annual Campus Placement Drive 2026 Registration',
+    description: 'Top technology companies including Microsoft, Google, and Amazon are visiting campus for 2027 batch recruitment. Register your updated resume before Sept 25.',
+    category: 'Placement',
+    priority: 'High',
+    publish_date: '2026-09-08',
+    expiry_date: '2026-09-25',
+    author_name: 'Placement & Training Cell',
+    pinned: true,
+    archived: false,
+  },
+  {
+    id: 'not-3',
+    title: 'Special Industry Seminar: AI & Cloud Systems Architecture',
+    description: 'Guest speaker session by Senior Cloud Architect from AWS on modern distributed systems and container orchestration.',
+    category: 'Academic',
+    priority: 'Normal',
+    publish_date: '2026-09-09',
+    expiry_date: '2026-09-22',
+    author_name: 'Department of Computer Science',
+    pinned: false,
+    archived: false,
+  },
+  {
+    id: 'not-4',
+    title: 'Library Clearance & Fee Settlement Notice',
+    description: 'All 5th and 7th-semester students are instructed to clear overdue library books and tuition balances prior to hall ticket issuance.',
+    category: 'General',
+    priority: 'Normal',
+    publish_date: '2026-09-05',
+    expiry_date: '2026-09-30',
+    author_name: 'Admin Finance Office',
+    pinned: false,
     archived: false,
   },
 ];
@@ -617,6 +653,15 @@ export const INITIAL_EVENTS: CollegeEvent[] = [
     start_date: '2026-09-22T09:00:00Z',
     end_date: '2026-09-23T21:00:00Z',
     location: 'Main Campus Auditorium',
+  },
+  {
+    id: 'evt-2',
+    title: 'Hackathon 2026: Smart Campus Innovation',
+    description: '24-hour coding competition with cash prizes for top full-stack web and mobile apps.',
+    event_type: 'Workshop',
+    start_date: '2026-10-05T09:00:00Z',
+    end_date: '2026-10-06T12:00:00Z',
+    location: 'Computer Center Lab 4B',
   },
 ];
 
@@ -635,6 +680,21 @@ export const INITIAL_CERTIFICATES: Certificate[] = [
     file_url: 'https://images.unsplash.com/photo-1589330694653-aded6fac0243?w=500',
     status: 'verified',
     remarks: 'Verified by Admin (Dr. Eleanor Vance).',
+  },
+  {
+    id: 'cert-2',
+    student_id: 'student-2',
+    student_name: 'Priya Sharma',
+    name: 'Meta Front-End Developer Professional Certificate',
+    organization: 'Coursera / Meta',
+    issue_date: '2026-07-20',
+    certificate_code: 'META-FE-9921',
+    credential_url: 'https://coursera.org/verify',
+    category: 'Course',
+    description: 'Mastery of React, JavaScript, HTML/CSS, and UX design principles.',
+    file_url: 'https://images.unsplash.com/photo-1589330694653-aded6fac0243?w=500',
+    status: 'verified',
+    remarks: 'Verified by HOD Dr. Robert Carter.',
   },
 ];
 
@@ -687,14 +747,93 @@ export const INITIAL_RESUME: ResumeData = {
 };
 
 export const INITIAL_NOTIFICATIONS: NotificationItem[] = [
+  // Student Notifications
   {
     id: 'notif-1',
     user_id: 'user-student-1',
     title: 'New Assignment Published in C++',
-    message: 'Dr. Vance published C++ Polymorphism assignment.',
+    message: 'Dr. Vance published C++ Object-Oriented Polymorphism assignment.',
     type: 'assignment',
     is_read: false,
     created_at: '2026-09-06T08:00:00Z',
+  },
+  {
+    id: 'notif-2',
+    user_id: 'user-student-1',
+    title: 'Mid-Sem Exam Schedule Released',
+    message: 'Mid-Semester exams begin Oct 1. Check your timetable desk.',
+    type: 'exam',
+    is_read: false,
+    created_at: '2026-09-08T10:30:00Z',
+  },
+  {
+    id: 'notif-3',
+    user_id: 'user-student-1',
+    title: 'AWS Certificate Verified',
+    message: 'Your AWS Cloud Practitioner certificate was verified by HOD Office.',
+    type: 'certificate',
+    is_read: true,
+    created_at: '2026-09-09T14:15:00Z',
+  },
+
+  // Teacher Notifications
+  {
+    id: 'notif-4',
+    user_id: 'user-teacher-1',
+    title: 'Attendance Submission Deadline',
+    message: 'Please complete attendance marking for C++ Programming Section A before Friday 5:00 PM.',
+    type: 'attendance',
+    is_read: false,
+    created_at: '2026-09-09T09:00:00Z',
+  },
+  {
+    id: 'notif-5',
+    user_id: 'user-teacher-1',
+    title: 'Gradebook Review Required',
+    message: 'HOD Office requested internal marks submission for B.Tech CSE 5th Semester.',
+    type: 'result',
+    is_read: false,
+    created_at: '2026-09-10T11:00:00Z',
+  },
+
+  // HOD Notifications
+  {
+    id: 'notif-6',
+    user_id: 'user-hod-1',
+    title: 'Department Performance Audit Report Ready',
+    message: 'Academic summary and attendance analytics report generated for CS Department.',
+    type: 'notice',
+    is_read: false,
+    created_at: '2026-09-10T08:00:00Z',
+  },
+  {
+    id: 'notif-7',
+    user_id: 'user-hod-1',
+    title: 'New Student Certificates Pending Verification',
+    message: '3 student achievement certificates require departmental verification.',
+    type: 'certificate',
+    is_read: false,
+    created_at: '2026-09-09T16:45:00Z',
+  },
+
+  // Admin Notifications
+  {
+    id: 'notif-8',
+    user_id: 'user-admin-1',
+    title: 'System Database Backup Successful',
+    message: 'PostgreSQL database snapshot & Supabase synchronization completed.',
+    type: 'info',
+    is_read: false,
+    created_at: '2026-09-10T04:00:00Z',
+  },
+  {
+    id: 'notif-9',
+    user_id: 'user-admin-1',
+    title: 'New Faculty Account Provisioned',
+    message: 'Prof. Meera Reddy registered and assigned to Discrete Mathematics.',
+    type: 'notice',
+    is_read: true,
+    created_at: '2026-09-07T12:00:00Z',
   },
 ];
 
