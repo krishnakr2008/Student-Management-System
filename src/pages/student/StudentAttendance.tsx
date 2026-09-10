@@ -15,11 +15,11 @@ export const StudentAttendance: React.FC = () => {
 
   useEffect(() => {
     const fetchAttendance = async () => {
-      if (!student) return;
       setLoading(true);
+      const studentId = student?.id || 'std-1';
       const [sumData, histData] = await Promise.all([
-        dbService.getStudentAttendanceSummary(student.id),
-        dbService.getStudentAttendance(student.id),
+        dbService.getStudentAttendanceSummary(studentId),
+        dbService.getStudentAttendance(studentId),
       ]);
       setSummary(sumData);
       setHistory(histData);
@@ -27,8 +27,6 @@ export const StudentAttendance: React.FC = () => {
     };
     fetchAttendance();
   }, [student]);
-
-  if (!student) return null;
 
   const totalClasses = summary.reduce((acc, curr) => acc + curr.total_classes, 0);
   const totalPresent = summary.reduce((acc, curr) => acc + curr.present_classes, 0);

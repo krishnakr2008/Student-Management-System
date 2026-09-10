@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { dbService } from '../../services/dbService';
+import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import { User, BookOpen, Shield, Save, Upload, Edit, Check, Briefcase } from 'lucide-react';
 
 export const StudentProfile: React.FC = () => {
@@ -70,7 +71,7 @@ export const StudentProfile: React.FC = () => {
     }
   };
 
-  if (!user) return null;
+  if (!user) return <div className="p-8"><LoadingSkeleton count={1} type="profile" /></div>;
 
   return (
     <div className="space-y-6 max-w-5xl mx-auto">

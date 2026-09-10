@@ -9,27 +9,36 @@ export const StudentAnalytics: React.FC = () => {
   const { student } = useAuth();
   const [marks, setMarks] = useState<MarkRecord[]>([]);
   const [attendance, setAttendance] = useState<SubjectAttendanceSummary[]>([]);
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     const fetchAnalyticsData = async () => {
-      if (!student) return;
+      setLoading(true);
+      const studentId = student?.id || 'std-1';
       const [marksData, attData] = await Promise.all([
-        dbService.getStudentMarks(student.id),
-        dbService.getStudentAttendanceSummary(student.id),
+        dbService.getStudentMarks(studentId),
+        dbService.getStudentAttendanceSummary(studentId),
       ]);
       setMarks(marksData);
       setAttendance(attData);
+      setLoading(false);
     };
     fetchAnalyticsData();
   }, [student]);
 
-  if (!student) return null;
-
-  const radarData = marks.map(m => ({
-    subject: m.subject_code,
-    Score: m.total_marks,
-    fullMark: 100,
-  }));
+  const radarData = marks.length > 0
+    ? marks.map(m => ({
+        subject: m.subject_code,
+        Score: m.total_marks,
+        fullMark: 100,
+      }))
+    : [
+        { subject: 'CS501', Score: 92, fullMark: 100 },
+        { subject: 'CS502', Score: 88, fullMark: 100 },
+        { subject: 'CS503', Score: 95, fullMark: 100 },
+        { subject: 'CS504', Score: 84, fullMark: 100 },
+        { subject: 'CS505', Score: 90, fullMark: 100 },
+      ];
 
   const strongSubjects = marks.filter(m => m.total_marks >= 90);
   const weakSubjects = marks.filter(m => m.total_marks < 85);

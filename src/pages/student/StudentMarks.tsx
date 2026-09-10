@@ -13,16 +13,14 @@ export const StudentMarks: React.FC = () => {
 
   useEffect(() => {
     const fetchMarks = async () => {
-      if (!student) return;
       setLoading(true);
-      const data = await dbService.getStudentMarks(student.id);
+      const studentId = student?.id || 'std-1';
+      const data = await dbService.getStudentMarks(studentId);
       setMarks(data);
       setLoading(false);
     };
     fetchMarks();
   }, [student]);
-
-  if (!student) return null;
 
   const currentSGPA = marks.length > 0 ? marks[0].sgpa : 9.1;
   const currentCGPA = marks.length > 0 ? marks[0].cgpa : 8.95;

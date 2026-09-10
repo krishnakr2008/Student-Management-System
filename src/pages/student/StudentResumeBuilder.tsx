@@ -5,6 +5,7 @@ import { dbService } from '../../services/dbService';
 import { ResumeData } from '../../types';
 import jsPDF from 'jspdf';
 import html2canvas from 'html2canvas';
+import { LoadingSkeleton } from '../../components/common/LoadingSkeleton';
 import {
   FileText,
   Download,
@@ -32,8 +33,8 @@ export const StudentResumeBuilder: React.FC = () => {
 
   useEffect(() => {
     const fetchResume = async () => {
-      if (!student) return;
-      const data = await dbService.getStudentResume(student.id);
+      const studentId = student?.id || 'std-1';
+      const data = await dbService.getStudentResume(studentId);
       setResume(data);
     };
     fetchResume();
@@ -83,7 +84,7 @@ export const StudentResumeBuilder: React.FC = () => {
     window.print();
   };
 
-  if (!resume) return null;
+  if (!resume) return <div className="p-8"><LoadingSkeleton count={3} type="card" /></div>;
 
   return (
     <div className="space-y-6">

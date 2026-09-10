@@ -19,13 +19,13 @@ export const StudentAssignments: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const loadData = async () => {
-    if (!student) return;
+    const studentId = student?.id || 'std-1';
     const [asgnData, subData] = await Promise.all([
       dbService.getAssignments(),
       dbService.getSubmissions(),
     ]);
     setAssignments(asgnData);
-    setSubmissions(subData.filter(s => s.student_id === student.id));
+    setSubmissions(subData.filter(s => s.student_id === studentId));
   };
 
   useEffect(() => {
@@ -45,13 +45,14 @@ export const StudentAssignments: React.FC = () => {
 
   const handleSubmitAssignment = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!student || !selectedAsgn) return;
+    if (!selectedAsgn) return;
 
+    const studentId = student?.id || 'std-1';
     setIsSubmitting(true);
     try {
       await dbService.submitAssignment({
         assignment_id: selectedAsgn.id,
-        student_id: student.id,
+        student_id: studentId,
         file_url: fileUrl || 'https://storage.university.edu/submissions/student-work.pdf',
         remarks: submissionRemarks,
         status: 'submitted',
@@ -66,8 +67,6 @@ export const StudentAssignments: React.FC = () => {
       setIsSubmitting(false);
     }
   };
-
-  if (!student) return null;
 
   return (
     <div className="space-y-6">
