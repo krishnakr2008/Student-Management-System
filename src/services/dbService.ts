@@ -1495,9 +1495,22 @@ export const dbService = {
 
   async uploadCertificate(cert: Omit<Certificate, 'id' | 'status'>): Promise<Certificate> {
     const generatedId = generateUUID();
+    const formatDateForDB = (d?: string): string => {
+      if (!d) return new Date().toISOString().split('T')[0];
+      const trimmed = d.trim();
+      if (/^\d{2}-\d{2}-\d{4}$/.test(trimmed)) {
+        const [day, month, year] = trimmed.split('-');
+        return `${year}-${month}-${day}`;
+      }
+      return trimmed;
+    };
+
+    const formattedDate = formatDateForDB(cert.issue_date);
+
     const newCert: Certificate = {
       ...cert,
       id: generatedId,
+      issue_date: formattedDate,
       status: 'pending',
     };
 
@@ -1521,7 +1534,7 @@ export const dbService = {
           student_id: validStudentId,
           name: cert.name,
           organization: cert.organization,
-          issue_date: cert.issue_date,
+          issue_date: formattedDate,
           certificate_code: cert.certificate_code || null,
           credential_url: cert.credential_url || null,
           category: cert.category,
@@ -1531,9 +1544,11 @@ export const dbService = {
         };
 
         const { error } = await supabase.from('certificates').insert(dbPayload);
-        if (error) console.warn('Supabase uploadCertificate warning:', error.message);
+        if (error) {
+          console.error('Certificate operation failed:', error.message, error.code, error.details, error.hint);
+        }
       } catch (err: any) {
-        console.warn('Supabase uploadCertificate exception:', err?.message || err);
+        console.error('Certificate upload exception:', err?.message || err);
       }
     }
 
@@ -1549,22 +1564,46 @@ export const dbService = {
     remarks?: string,
     adminId?: string
   ): Promise<boolean> {
+    let validAdminId: string | undefined = isValidUUID(adminId) ? adminId : undefined;
+    if (!validAdminId && isRealSupabaseConfigured()) {
+      try {
+        const { data: authUser } = await supabase.auth.getUser();
+        if (authUser?.user?.id && isValidUUID(authUser.user.id)) {
+          validAdminId = authUser.user.id;
+        }
+      } catch (e) {
+        console.warn('Could not resolve admin auth id:', e);
+      }
+    }
+
     const updatePayload = {
       status,
       remarks: remarks || '',
-      verified_by: adminId || 'admin-user',
+      verified_by: validAdminId || null,
       verified_at: new Date().toISOString(),
     };
 
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('certificates').update(updatePayload).eq('id', id);
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
+      try {
+        const { error } = await supabase.from('certificates').update(updatePayload).eq('id', id);
+        if (error) {
+          console.error('Update certificate status failed:', error.message, error.code, error.details, error.hint);
+        }
+      } catch (e) {
+        console.error('Update certificate status exception:', e);
+      }
     }
 
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
     const idx = all.findIndex(c => c.id === id);
     if (idx !== -1) {
-      all[idx] = { ...all[idx], ...updatePayload };
+      all[idx] = {
+        ...all[idx],
+        status,
+        remarks: remarks || '',
+        verified_by: validAdminId,
+        verified_at: updatePayload.verified_at,
+      };
       setStorageData('certificates', all);
       return true;
     }
@@ -1572,9 +1611,13 @@ export const dbService = {
   },
 
   async deleteCertificate(id: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('certificates').delete().eq('id', id);
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
+      try {
+        const { error } = await supabase.from('certificates').delete().eq('id', id);
+        if (error) console.error('Supabase deleteCertificate error:', error.message);
+      } catch (e) {
+        console.error('Supabase deleteCertificate exception:', e);
+      }
     }
 
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);

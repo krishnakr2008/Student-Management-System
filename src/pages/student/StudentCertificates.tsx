@@ -5,7 +5,7 @@ import { dbService } from '../../services/dbService';
 import { Certificate } from '../../types';
 import { Badge } from '../../components/common/Badge';
 import { Modal } from '../../components/common/Modal';
-import { Plus, ExternalLink, ShieldCheck, ShieldAlert } from 'lucide-react';
+import { Plus, ExternalLink, ShieldCheck, ShieldAlert, Trash2 } from 'lucide-react';
 
 export const StudentCertificates: React.FC = () => {
   const { student } = useAuth();
@@ -171,17 +171,37 @@ export const StudentCertificates: React.FC = () => {
 
               <div className="pt-3 border-t border-slate-100 dark:border-slate-800 flex items-center justify-between text-xs">
                 <span className="text-slate-400">Issued: {cert.issue_date}</span>
-                {cert.credential_url && (
-                  <a
-                    href={cert.credential_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                <div className="flex items-center gap-3">
+                  {cert.credential_url && (
+                    <a
+                      href={cert.credential_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1"
+                    >
+                      <span>Verify Link</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      if (window.confirm(`Are you sure you want to delete "${cert.name}"?`)) {
+                        try {
+                          await dbService.deleteCertificate(cert.id);
+                          await loadCertificates();
+                          showToast('Certificate Deleted', 'Certificate removed from your portfolio.', 'info');
+                        } catch (err: any) {
+                          showToast('Error', err.message || 'Failed to delete certificate.', 'error');
+                        }
+                      }
+                    }}
+                    className="p-1 text-slate-400 hover:text-rose-600 rounded-lg hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors"
+                    title="Delete Certificate"
                   >
-                    <span>Verify Link</span>
-                    <ExternalLink className="w-3 h-3" />
-                  </a>
-                )}
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
           ))}

@@ -359,18 +359,43 @@ CREATE POLICY "Admin full access subjects" ON public.subjects FOR ALL USING (tru
 CREATE POLICY "Admin full access teacher_subjects" ON public.teacher_subjects FOR ALL USING (true);
 CREATE POLICY "Admin full access student_subjects" ON public.student_subjects FOR ALL USING (true);
 
--- CERTIFICATE VERIFICATION RLS (Students upload own, Admin manages & verifies)
-CREATE POLICY "Student insert own certificates" ON public.certificates FOR INSERT WITH CHECK (
-    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR public.is_admin()
-);
+-- Helper Function: Check HOD Authority
+CREATE OR REPLACE FUNCTION public.is_hod()
+RETURNS BOOLEAN AS $$
+BEGIN
+  RETURN EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role IN ('hod', 'admin'));
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER;
 
-CREATE POLICY "Read certificates" ON public.certificates FOR SELECT USING (
-    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR public.is_admin()
-);
+-- CERTIFICATE VERIFICATION RLS POLICIES
+DROP POLICY IF EXISTS "Student insert own certificates" ON public.certificates;
+DROP POLICY IF EXISTS "Read certificates" ON public.certificates;
+DROP POLICY IF EXISTS "Admin verify certificates" ON public.certificates;
+DROP POLICY IF EXISTS "HOD and Admin verify certificates" ON public.certificates;
 
-CREATE POLICY "Admin verify certificates" ON public.certificates FOR UPDATE USING (
-    public.is_admin()
-);
+CREATE POLICY "Student insert own certificates" ON public.certificates FOR INSERT 
+  WITH CHECK (
+    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR 
+    public.is_admin() OR 
+    public.is_hod() OR 
+    auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "Read certificates" ON public.certificates FOR SELECT 
+  USING (
+    student_id IN (SELECT id FROM public.students WHERE profile_id = auth.uid()) OR 
+    public.is_admin() OR 
+    public.is_hod() OR 
+    auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "HOD and Admin verify certificates" ON public.certificates FOR UPDATE 
+  USING (
+    public.is_admin() OR public.is_hod() OR auth.role() = 'authenticated'
+  )
+  WITH CHECK (
+    public.is_admin() OR public.is_hod() OR auth.role() = 'authenticated'
+  );
 
 -- TEACHER SUBJECT SCOPED POLICIES
 CREATE POLICY "Teacher read attendance" ON public.attendance FOR SELECT USING (
