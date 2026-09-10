@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile, Student, Teacher, UserRole } from '../types';
-import { dbService, generateUUID } from '../services/dbService';
+import { dbService, generateUUID, isValidUUID } from '../services/dbService';
 import { supabase, isRealSupabaseConfigured } from '../lib/supabase';
 
 export interface LoginResult {
@@ -203,12 +203,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       const cleanIdentifier = identifier.trim();
 
-      // 1. Supabase Mode
-      if (isRealSupabaseConfigured() && password) {
+      // 1. Fetch profile from database first to determine if it is a real Supabase Auth user or a demo/local profile
+      const existingProfile = await dbService.getProfileByIdentifier(cleanIdentifier);
+
+      const isDemoAccount =
+        cleanIdentifier.toLowerCase().includes('@college.com') ||
+        cleanIdentifier.toLowerCase().startsWith('student') ||
+        cleanIdentifier.toLowerCase().startsWith('teacher') ||
+        cleanIdentifier.toLowerCase().startsWith('admin') ||
+        cleanIdentifier.toLowerCase().startsWith('hod') ||
+        cleanIdentifier.toLowerCase().startsWith('std-') ||
+        cleanIdentifier.toLowerCase().startsWith('tch-') ||
+        cleanIdentifier.toLowerCase().startsWith('23cs') ||
+        (existingProfile ? !isValidUUID(existingProfile.id) : false);
+
+      if (isDemoAccount && existingProfile) {
+        profile = existingProfile;
+      } else if (isRealSupabaseConfigured() && password) {
         let loginEmail = cleanIdentifier;
-        if (!loginEmail.includes('@')) {
-          const preLook = await dbService.getProfileByIdentifier(loginEmail);
-          if (preLook && preLook.email) loginEmail = preLook.email;
+        if (!loginEmail.includes('@') && existingProfile && existingProfile.email) {
+          loginEmail = existingProfile.email;
         }
 
         const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -217,10 +231,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         });
 
         if (authError) {
-          console.warn('Supabase Auth signIn failed, checking profile fallback:', authError.message);
-          const fallbackProfile = await dbService.getProfileByIdentifier(cleanIdentifier);
-          if (fallbackProfile && fallbackProfile.role) {
-            profile = fallbackProfile;
+          if (existingProfile && existingProfile.role) {
+            profile = existingProfile;
           } else {
             clearUserState();
             return {
@@ -230,10 +242,8 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           }
         } else if (authData && authData.user) {
           const authUser = authData.user;
-          profile = await dbService.getProfileById(authUser.id);
-          if (!profile && authUser.email) {
-            profile = await dbService.getProfileByEmail(authUser.email);
-          }
+          profile = (await dbService.getProfileById(authUser.id)) ||
+                    (await dbService.getProfileByEmail(authUser.email || ''));
         }
       }
 
