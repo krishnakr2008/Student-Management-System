@@ -619,10 +619,13 @@ export const dbService = {
       created_at: new Date().toISOString(),
     };
 
-    if (isRealSupabaseConfigured() && isValidUUID(teacherId) && isValidUUID(subjectId)) {
+    if (isRealSupabaseConfigured()) {
       try {
-        const { error } = await supabase.from('teacher_subjects').insert({ teacher_id: teacherId, subject_id: subjectId });
-        if (error) console.warn('Supabase assignTeacherSubject error:', error.message);
+        if (isValidUUID(teacherId) && isValidUUID(subjectId)) {
+          const { error } = await supabase.from('teacher_subjects').upsert({ teacher_id: teacherId, subject_id: subjectId });
+          if (error) console.warn('Supabase assignTeacherSubject error:', error.message);
+          await supabase.from('subjects').update({ teacher_id: teacherId }).eq('id', subjectId);
+        }
       } catch (e) {
         console.warn('Supabase assignTeacherSubject exception:', e);
       }
