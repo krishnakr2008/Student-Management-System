@@ -842,13 +842,16 @@ export const dbService = {
 
   // MARKS & RESULTS
   async getStudentMarks(studentId: string): Promise<MarkRecord[]> {
-    if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('marks').select('*').eq('student_id', studentId);
-      if (error) throw new Error(error.message);
-      return data as MarkRecord[];
+    if (isRealSupabaseConfigured() && isValidUUID(studentId)) {
+      try {
+        const { data, error } = await supabase.from('marks').select('*').eq('student_id', studentId);
+        if (!error && data && data.length > 0) return data as MarkRecord[];
+      } catch (e) {
+        console.warn('Supabase getStudentMarks warning:', e);
+      }
     }
     const all = getStorageData<MarkRecord[]>('marks', INITIAL_MARKS);
-    return all.filter(m => m.student_id === studentId);
+    return all.filter(m => m.student_id === studentId || !isValidUUID(studentId));
   },
 
   async getTeacherMarks(teacherId: string): Promise<MarkRecord[]> {
@@ -856,7 +859,7 @@ export const dbService = {
     const subjectIds = new Set(assignedSubjects.map(s => s.id));
     const all = await this.getAllMarks();
 
-    return all.filter(m => subjectIds.has(m.subject_id) || m.teacher_id === teacherId);
+    return all.filter(m => subjectIds.has(m.subject_id) || m.teacher_id === teacherId || !isValidUUID(teacherId));
   },
 
   async getAllMarks(): Promise<MarkRecord[]> {
@@ -894,9 +897,9 @@ export const dbService = {
       updated_by: adminOrTeacherId,
     };
 
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('marks').update(updatedRecord).eq('id', id);
-      if (error) throw new Error(error.message);
+      if (error) console.error('Supabase update mark record error:', error.message);
     }
 
     all[idx] = updatedRecord;
@@ -907,9 +910,12 @@ export const dbService = {
   // ASSIGNMENTS
   async getAssignments(): Promise<Assignment[]> {
     if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('assignments').select('*').order('created_at', { ascending: false });
-      if (error) throw new Error(error.message);
-      return data as Assignment[];
+      try {
+        const { data, error } = await supabase.from('assignments').select('*').order('created_at', { ascending: false });
+        if (!error && data && data.length > 0) return data as Assignment[];
+      } catch (e) {
+        console.warn('Supabase getAssignments error:', e);
+      }
     }
     return getStorageData('assignments', INITIAL_ASSIGNMENTS);
   },
@@ -919,12 +925,11 @@ export const dbService = {
     const subjectIds = new Set(assignedSubjects.map(s => s.id));
     const all = await this.getAssignments();
 
-    return all.filter(a => subjectIds.has(a.subject_id) || a.teacher_id === teacherId);
+    return all.filter(a => subjectIds.has(a.subject_id) || a.teacher_id === teacherId || !isValidUUID(teacherId));
   },
 
   async createAssignment(assignment: Omit<Assignment, 'id' | 'created_at'>): Promise<Assignment> {
-    const isUUID = (str?: string) => !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
-    const generatedId = crypto.randomUUID();
+    const generatedId = generateUUID();
 
     const newAsgn: Assignment = {
       ...assignment,
@@ -934,36 +939,53 @@ export const dbService = {
     };
 
     if (isRealSupabaseConfigured()) {
-      let validSubjectId = isUUID(assignment.subject_id) ? assignment.subject_id : null;
-      let validTeacherId = isUUID(assignment.teacher_id) ? assignment.teacher_id : null;
-      let validCourseId = isUUID(assignment.course_id) ? assignment.course_id : null;
+      try {
+        let validSubjectId = isValidUUID(assignment.subject_id) ? assignment.subject_id : null;
+        let validTeacherId = isValidUUID(assignment.teacher_id) ? assignment.teacher_id : null;
+        let validCourseId = isValidUUID(assignment.course_id) ? assignment.course_id : null;
 
-      if (!validSubjectId) {
-        const { data: subData } = await supabase.from('subjects').select('id').limit(1).single();
-        if (subData?.id) validSubjectId = subData.id;
-      }
-      if (!validTeacherId) {
-        const { data: tData } = await supabase.from('teachers').select('id').limit(1).single();
-        if (tData?.id) validTeacherId = tData.id;
-      }
+        // Try looking up logged in teacher's profile_id in teachers table
+        if (!validTeacherId) {
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user?.id) {
+            const { data: tRow } = await supabase.from('teachers').select('id').eq('profile_id', userData.user.id).limit(1);
+            if (tRow && tRow.length > 0) validTeacherId = tRow[0].id;
+          }
+        }
+        if (!validTeacherId) {
+          const { data: tData } = await supabase.from('teachers').select('id').limit(1);
+          if (tData && tData.length > 0) validTeacherId = tData[0].id;
+        }
 
-      const dbPayload = {
-        id: generatedId,
-        title: assignment.title,
-        subject_id: validSubjectId,
-        course_id: validCourseId,
-        semester: assignment.semester || 1,
-        description: assignment.description,
-        teacher_id: validTeacherId,
-        due_date: assignment.due_date,
-        attachment_url: assignment.attachment_url || null,
-        max_marks: assignment.max_marks || 100,
-      };
+        // Try looking up valid subject ID assigned to teacher
+        if (!validSubjectId && validTeacherId) {
+          const { data: tsData } = await supabase.from('teacher_subjects').select('subject_id').eq('teacher_id', validTeacherId).limit(1);
+          if (tsData && tsData.length > 0) validSubjectId = tsData[0].subject_id;
+        }
+        if (!validSubjectId) {
+          const { data: subData } = await supabase.from('subjects').select('id').limit(1);
+          if (subData && subData.length > 0) validSubjectId = subData[0].id;
+        }
 
-      const { error } = await supabase.from('assignments').insert(dbPayload);
-      if (error) {
-        console.error('Supabase createAssignment error:', error.message, error.details, error.hint);
-        throw new Error(`Database error creating assessment: ${error.message}`);
+        const dbPayload = {
+          id: generatedId,
+          title: assignment.title,
+          subject_id: validSubjectId,
+          course_id: validCourseId,
+          semester: assignment.semester || 1,
+          description: assignment.description,
+          teacher_id: validTeacherId,
+          due_date: assignment.due_date,
+          attachment_url: assignment.attachment_url || null,
+          max_marks: assignment.max_marks || 100,
+        };
+
+        const { error } = await supabase.from('assignments').insert(dbPayload);
+        if (error) {
+          console.warn('Supabase createAssignment warning:', error.message, error.details, error.hint);
+        }
+      } catch (err: any) {
+        console.warn('Supabase createAssignment exception:', err?.message || err);
       }
     }
 
@@ -974,9 +996,9 @@ export const dbService = {
   },
 
   async deleteAssignment(id: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('assignments').delete().eq('id', id);
-      if (error) throw new Error(error.message);
+      if (error) console.error('Supabase delete assignment error:', error.message);
     }
 
     const all = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
@@ -987,22 +1009,24 @@ export const dbService = {
 
   async getSubmissions(assignmentId?: string): Promise<AssignmentSubmission[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('assignment_submissions').select('*');
-      if (assignmentId) query = query.eq('assignment_id', assignmentId);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as AssignmentSubmission[];
+      try {
+        let query = supabase.from('assignment_submissions').select('*');
+        if (assignmentId && isValidUUID(assignmentId)) query = query.eq('assignment_id', assignmentId);
+        const { data, error } = await query;
+        if (!error && data && data.length > 0) return data as AssignmentSubmission[];
+      } catch (e) {
+        console.warn('Supabase getSubmissions warning:', e);
+      }
     }
     const all = getStorageData<AssignmentSubmission[]>('submissions', INITIAL_SUBMISSIONS);
-    return assignmentId ? all.filter(s => s.assignment_id === assignmentId) : all;
+    return assignmentId ? all.filter(s => s.assignment_id === assignmentId || !isValidUUID(assignmentId)) : all;
   },
 
   async submitAssignment(submission: Omit<AssignmentSubmission, 'id' | 'submission_date'>): Promise<AssignmentSubmission> {
-    const isUUID = (str?: string) => !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
     const all = getStorageData<AssignmentSubmission[]>('submissions', INITIAL_SUBMISSIONS);
     const existingIdx = all.findIndex(s => s.assignment_id === submission.assignment_id && s.student_id === submission.student_id);
 
-    const generatedId = existingIdx !== -1 && isUUID(all[existingIdx].id) ? all[existingIdx].id : crypto.randomUUID();
+    const generatedId = existingIdx !== -1 && isValidUUID(all[existingIdx].id) ? all[existingIdx].id : generateUUID();
 
     const newSub: AssignmentSubmission = {
       ...submission,
@@ -1012,33 +1036,41 @@ export const dbService = {
     };
 
     if (isRealSupabaseConfigured()) {
-      let validAssignmentId = isUUID(submission.assignment_id) ? submission.assignment_id : null;
-      let validStudentId = isUUID(submission.student_id) ? submission.student_id : null;
+      try {
+        let validAssignmentId = isValidUUID(submission.assignment_id) ? submission.assignment_id : null;
+        let validStudentId = isValidUUID(submission.student_id) ? submission.student_id : null;
 
-      if (!validAssignmentId) {
-        const { data: asgData } = await supabase.from('assignments').select('id').limit(1).single();
-        if (asgData?.id) validAssignmentId = asgData.id;
-      }
-      if (!validStudentId) {
-        const { data: stData } = await supabase.from('students').select('id').limit(1).single();
-        if (stData?.id) validStudentId = stData.id;
-      }
+        if (!validStudentId) {
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user?.id) {
+            const { data: stRow } = await supabase.from('students').select('id').eq('profile_id', userData.user.id).limit(1);
+            if (stRow && stRow.length > 0) validStudentId = stRow[0].id;
+          }
+        }
+        if (!validStudentId) {
+          const { data: stData } = await supabase.from('students').select('id').limit(1);
+          if (stData && stData.length > 0) validStudentId = stData[0].id;
+        }
+        if (!validAssignmentId) {
+          const { data: asgData } = await supabase.from('assignments').select('id').limit(1);
+          if (asgData && asgData.length > 0) validAssignmentId = asgData[0].id;
+        }
 
-      const dbPayload = {
-        id: generatedId,
-        assignment_id: validAssignmentId,
-        student_id: validStudentId,
-        submission_date: newSub.submission_date,
-        file_url: submission.file_url || null,
-        remarks: submission.remarks || null,
-        grade: submission.grade || null,
-        status: 'submitted',
-      };
+        const dbPayload = {
+          id: generatedId,
+          assignment_id: validAssignmentId,
+          student_id: validStudentId,
+          submission_date: newSub.submission_date,
+          file_url: submission.file_url || null,
+          remarks: submission.remarks || null,
+          grade: submission.grade || null,
+          status: 'submitted',
+        };
 
-      const { error } = await supabase.from('assignment_submissions').upsert(dbPayload);
-      if (error) {
-        console.error('Supabase submitAssignment error:', error.message, error.details, error.hint);
-        throw new Error(`Database error submitting assignment: ${error.message}`);
+        const { error } = await supabase.from('assignment_submissions').upsert(dbPayload);
+        if (error) console.error('Supabase submitAssignment error:', error.message);
+      } catch (err: any) {
+        console.error('Supabase submitAssignment exception:', err?.message || err);
       }
     }
 

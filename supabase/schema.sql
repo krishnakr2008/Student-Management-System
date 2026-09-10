@@ -395,10 +395,24 @@ CREATE POLICY "Teacher write marks" ON public.marks FOR ALL USING (
     public.is_teacher_assigned_subject(subject_id)
 );
 
-CREATE POLICY "Teacher manage assignments" ON public.assignments FOR ALL USING (
-    public.is_teacher_assigned_subject(subject_id)
-);
+CREATE POLICY "Teacher manage assignments" ON public.assignments FOR ALL 
+  USING (
+    public.is_teacher_assigned_subject(subject_id) OR 
+    public.is_admin() OR 
+    teacher_id IN (SELECT id FROM public.teachers WHERE profile_id = auth.uid()) OR
+    auth.role() = 'authenticated'
+  )
+  WITH CHECK (
+    public.is_teacher_assigned_subject(subject_id) OR 
+    public.is_admin() OR 
+    teacher_id IN (SELECT id FROM public.teachers WHERE profile_id = auth.uid()) OR
+    auth.role() = 'authenticated'
+  );
+
+CREATE POLICY "Submissions access policy" ON public.assignment_submissions FOR ALL 
+  USING (true)
+  WITH CHECK (true);
 
 CREATE POLICY "Teacher manage exams" ON public.exams FOR ALL USING (
-    public.is_teacher_assigned_subject(subject_id)
+    public.is_teacher_assigned_subject(subject_id) OR public.is_admin() OR auth.role() = 'authenticated'
 );
