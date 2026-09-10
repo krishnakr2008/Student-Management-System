@@ -50,7 +50,7 @@ export const StudentExams: React.FC = () => {
                 </p>
                 <p className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-amber-500" />
-                  <span>Time: {exam.start_time} - {exam.end_time}</span>
+                  <span>Time: {exam.start_time && exam.end_time ? `${exam.start_time} - ${exam.end_time}` : 'Time not available'}</span>
                 </p>
                 <p className="flex items-center gap-2">
                   <MapPin className="w-4 h-4 text-rose-500" />

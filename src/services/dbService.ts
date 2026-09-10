@@ -261,29 +261,41 @@ export const dbService = {
       throw new Error(`Student ID code "${studentData.student_id_code}" is already registered.`);
     }
 
-    const newId = `student-${Date.now()}`;
-    const newProfileId = `user-${Date.now()}`;
+    const newProfileId = isValidUUID(studentData.profile_id) ? studentData.profile_id : generateUUID();
+    const newId = generateUUID();
     const newProfile: UserProfile = { ...profileData, id: newProfileId, role: 'student', created_at: new Date().toISOString() };
     const newStudent: Student = { ...studentData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
 
     if (isRealSupabaseConfigured()) {
-      const { error: pErr } = await supabase.from('profiles').insert(newProfile);
+      const { error: pErr } = await supabase.from('profiles').upsert({
+        id: newProfileId,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        role: 'student',
+        phone: profileData.phone || null,
+        gender: profileData.gender || null,
+        dob: profileData.dob || null,
+        address: profileData.address || null,
+        avatar_url: profileData.avatar_url || null,
+        created_at: newProfile.created_at,
+        updated_at: newProfile.created_at,
+      });
       if (pErr) throw new Error(pErr.message);
 
       const { error: sErr } = await supabase.from('students').insert({
         id: newId,
         profile_id: newProfileId,
         student_id_code: studentData.student_id_code,
-        course_id: studentData.course_id,
+        course_id: isValidUUID(studentData.course_id) ? studentData.course_id : null,
         department: studentData.department,
         branch: studentData.branch,
         semester: studentData.semester,
         section: studentData.section,
         roll_number: studentData.roll_number,
         admission_year: studentData.admission_year,
-        guardian_name: studentData.guardian_name,
-        guardian_phone: studentData.guardian_phone,
-        guardian_relation: studentData.guardian_relation,
+        guardian_name: studentData.guardian_name || null,
+        guardian_phone: studentData.guardian_phone || null,
+        guardian_relation: studentData.guardian_relation || null,
         active: true,
       });
       if (sErr) throw new Error(sErr.message);
@@ -314,7 +326,7 @@ export const dbService = {
     students[index] = updatedStudent;
     setStorageData('students', students);
 
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       try {
         const { profile, ...dbFields } = updatedStudent as any;
         const { error } = await supabase.from('students').update(dbFields).eq('id', id);
@@ -336,7 +348,7 @@ export const dbService = {
       setStorageData('students', students);
     }
 
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       const { error } = await supabase.from('students').update({ active: false }).eq('id', id);
       if (error) throw new Error(error.message);
     }
@@ -364,13 +376,25 @@ export const dbService = {
       throw new Error(`Teacher ID code "${teacherData.teacher_id_code}" is already in use.`);
     }
 
-    const newId = `teacher-${Date.now()}`;
-    const newProfileId = `user-teacher-${Date.now()}`;
+    const newProfileId = isValidUUID(teacherData.profile_id) ? teacherData.profile_id : generateUUID();
+    const newId = generateUUID();
     const newProfile: UserProfile = { ...profileData, id: newProfileId, role: 'teacher', created_at: new Date().toISOString() };
     const newTeacher: Teacher = { ...teacherData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
 
     if (isRealSupabaseConfigured()) {
-      const { error: pErr } = await supabase.from('profiles').insert(newProfile);
+      const { error: pErr } = await supabase.from('profiles').upsert({
+        id: newProfileId,
+        full_name: profileData.full_name,
+        email: profileData.email,
+        role: 'teacher',
+        phone: profileData.phone || null,
+        gender: profileData.gender || null,
+        dob: profileData.dob || null,
+        address: profileData.address || null,
+        avatar_url: profileData.avatar_url || null,
+        created_at: newProfile.created_at,
+        updated_at: newProfile.created_at,
+      });
       if (pErr) throw new Error(pErr.message);
 
       const { error: tErr } = await supabase.from('teachers').insert({

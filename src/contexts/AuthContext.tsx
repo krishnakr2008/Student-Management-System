@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { UserProfile, Student, Teacher, UserRole } from '../types';
-import { dbService } from '../services/dbService';
+import { dbService, generateUUID } from '../services/dbService';
 import { supabase, isRealSupabaseConfigured } from '../lib/supabase';
 
 export interface LoginResult {
@@ -26,7 +26,7 @@ interface AuthContextType {
   role: UserRole | null;
   loading: boolean;
   login: (identifier: string, reqRole?: UserRole, password?: string) => Promise<LoginResult | boolean>;
-  signup: (full_name: string, email: string, role: UserRole) => Promise<boolean>;
+  signup: (full_name: string, email: string, role: UserRole, password?: string, extraDetails?: Partial<Student> & Partial<UserProfile>) => Promise<{ success: boolean; error?: string }>;
   logout: () => void;
   switchRole: (newRole: UserRole) => Promise<void>;
   refreshUserData: () => Promise<void>;
@@ -289,22 +289,62 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     }
   };
 
-  const signup = async (full_name: string, email: string, newRole: UserRole): Promise<boolean> => {
+  const signup = async (
+    full_name: string,
+    email: string,
+    newRole: UserRole,
+    password?: string,
+    extraDetails?: Partial<Student> & Partial<UserProfile>
+  ): Promise<{ success: boolean; error?: string }> => {
     setLoading(true);
     try {
+      let realAuthUserId = '';
+
+      if (isRealSupabaseConfigured()) {
+        if (!password) {
+          return { success: false, error: 'Password is required for registration.' };
+        }
+
+        const { data: authData, error: authErr } = await supabase.auth.signUp({
+          email: email.trim(),
+          password: password,
+          options: {
+            data: {
+              full_name,
+              role: newRole,
+            },
+          },
+        });
+
+        if (authErr) {
+          return { success: false, error: authErr.message };
+        }
+
+        if (!authData?.user) {
+          return { success: false, error: 'Failed to create user account in Supabase Auth.' };
+        }
+
+        realAuthUserId = authData.user.id;
+      } else {
+        realAuthUserId = generateUUID();
+      }
+
       if (newRole === 'student') {
         const newStudent = await dbService.createStudent(
           {
-            profile_id: '',
-            student_id_code: `STD-${Date.now().toString().substr(-4)}`,
-            department: 'Computer Science',
-            branch: 'CSE',
-            semester: 1,
-            section: 'A',
-            roll_number: `23CS${Math.floor(100 + Math.random() * 900)}`,
-            admission_year: 2026,
+            profile_id: realAuthUserId,
+            student_id_code: extraDetails?.student_id_code || `STD-${Date.now().toString().slice(-4)}`,
+            department: extraDetails?.department || 'Computer Science',
+            branch: extraDetails?.branch || 'CSE',
+            semester: extraDetails?.semester || 1,
+            section: extraDetails?.section || 'A',
+            roll_number: extraDetails?.roll_number || `23CS${Math.floor(100 + Math.random() * 900)}`,
+            admission_year: extraDetails?.admission_year || 2026,
+            guardian_name: extraDetails?.guardian_name || '',
+            guardian_phone: extraDetails?.guardian_phone || '',
+            guardian_relation: extraDetails?.guardian_relation || '',
           },
-          { full_name, email, role: 'student' }
+          { full_name, email, role: 'student', phone: extraDetails?.phone || '', address: extraDetails?.address || '' }
         );
         if (newStudent.profile) {
           await applyUserProfile(newStudent.profile);
@@ -312,9 +352,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       } else if (newRole === 'teacher') {
         const newTeacher = await dbService.createTeacher(
           {
-            profile_id: '',
-            teacher_id_code: `TCH-${Date.now().toString().substr(-4)}`,
-            department: 'Computer Science',
+            profile_id: realAuthUserId,
+            teacher_id_code: `TCH-${Date.now().toString().slice(-4)}`,
+            department: extraDetails?.department || 'Computer Science',
             designation: 'Assistant Professor',
           },
           { full_name, email, role: 'teacher' }
@@ -323,10 +363,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await applyUserProfile(newTeacher.profile);
         }
       }
-      return true;
-    } catch (e) {
+      return { success: true };
+    } catch (e: any) {
       console.error('Signup error:', e);
-      return false;
+      return { success: false, error: e.message || 'An unexpected error occurred during account creation.' };
     } finally {
       setLoading(false);
     }

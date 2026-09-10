@@ -29,14 +29,14 @@ export const Signup: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const success = await signup(fullName, email, selectedRole);
+    const result = await signup(fullName, email, selectedRole, password);
     setIsSubmitting(false);
 
-    if (success) {
+    if (result.success) {
       showToast('Account Created', 'Registration completed successfully!', 'success');
       navigate(`/${selectedRole}/dashboard`);
     } else {
-      showToast('Registration Error', 'Could not create account. Please try again.', 'error');
+      showToast('Registration Error', result.error || 'Could not create account. Please try again.', 'error');
     }
   };
 
