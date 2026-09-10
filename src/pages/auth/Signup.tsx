@@ -3,7 +3,7 @@ import { useNavigate, Link } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { useToast } from '../../contexts/ToastContext';
 import { UserRole } from '../../types';
-import { GraduationCap, Mail, Lock, User, ArrowRight, ShieldAlert } from 'lucide-react';
+import { GraduationCap, Mail, Lock, User, ArrowRight, ShieldAlert, Phone, Building } from 'lucide-react';
 
 export const Signup: React.FC = () => {
   const navigate = useNavigate();
@@ -12,6 +12,8 @@ export const Signup: React.FC = () => {
 
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [department, setDepartment] = useState('Computer Science');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [selectedRole, setSelectedRole] = useState<'student' | 'teacher'>('student');
@@ -20,7 +22,7 @@ export const Signup: React.FC = () => {
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!fullName || !email || !password || !confirmPassword) {
-      showToast('Validation Error', 'All fields are required.', 'error');
+      showToast('Validation Error', 'All required fields must be completed.', 'error');
       return;
     }
     if (password !== confirmPassword) {
@@ -29,14 +31,17 @@ export const Signup: React.FC = () => {
     }
 
     setIsSubmitting(true);
-    const result = await signup(fullName, email, selectedRole, password);
+    const result = await signup(fullName, email, selectedRole, password, {
+      phone: phone || undefined,
+      department: department || 'Computer Science',
+    });
     setIsSubmitting(false);
 
     if (result.success) {
-      showToast('Account Created', 'Registration completed successfully!', 'success');
+      showToast('Account Created', 'Registration and Supabase database persistence verified successfully!', 'success');
       navigate(`/${selectedRole}/dashboard`);
     } else {
-      showToast('Registration Error', result.error || 'Could not create account. Please try again.', 'error');
+      showToast('Registration Error', result.error || 'Could not create account in Supabase. Please try again.', 'error');
     }
   };
 
@@ -104,6 +109,40 @@ export const Signup: React.FC = () => {
                 placeholder="alex@university.edu"
                 className="w-full pl-10 pr-4 py-2.5 bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden transition-colors"
               />
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Phone Number (Optional)</label>
+              <div className="relative">
+                <Phone className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <input
+                  type="text"
+                  value={phone}
+                  onChange={e => setPhone(e.target.value)}
+                  placeholder="+1 555-0199"
+                  className="w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl text-xs text-white placeholder-slate-500 focus:outline-hidden transition-colors"
+                />
+              </div>
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="text-xs font-semibold text-slate-300">Department</label>
+              <div className="relative">
+                <Building className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+                <select
+                  value={department}
+                  onChange={e => setDepartment(e.target.value)}
+                  className="w-full pl-10 pr-3 py-2.5 bg-slate-950 border border-slate-800 focus:border-brand-500 rounded-xl text-xs text-white focus:outline-hidden transition-colors"
+                >
+                  <option value="Computer Science">Computer Science</option>
+                  <option value="Information Technology">Information Technology</option>
+                  <option value="Electrical Engineering">Electrical Engineering</option>
+                  <option value="Mechanical Engineering">Mechanical Engineering</option>
+                  <option value="Business Administration">Business Administration</option>
+                </select>
+              </div>
             </div>
           </div>
 

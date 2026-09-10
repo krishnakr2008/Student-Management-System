@@ -363,6 +363,38 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           await applyUserProfile(newTeacher.profile);
         }
       }
+
+      // Real-time database persistence verification query in Supabase
+      if (isRealSupabaseConfigured() && realAuthUserId) {
+        if (newRole === 'student') {
+          const { data: vData, error: vErr } = await supabase
+            .from('students')
+            .select('*, profile:profiles(*)')
+            .eq('profile_id', realAuthUserId)
+            .maybeSingle();
+
+          if (vErr || !vData) {
+            return {
+              success: false,
+              error: `Database persistence verification failed: ${vErr?.message || 'Student record could not be confirmed in Supabase.'}`,
+            };
+          }
+        } else if (newRole === 'teacher') {
+          const { data: vData, error: vErr } = await supabase
+            .from('teachers')
+            .select('*, profile:profiles(*)')
+            .eq('profile_id', realAuthUserId)
+            .maybeSingle();
+
+          if (vErr || !vData) {
+            return {
+              success: false,
+              error: `Database persistence verification failed: ${vErr?.message || 'Teacher record could not be confirmed in Supabase.'}`,
+            };
+          }
+        }
+      }
+
       return { success: true };
     } catch (e: any) {
       console.error('Signup error:', e);
