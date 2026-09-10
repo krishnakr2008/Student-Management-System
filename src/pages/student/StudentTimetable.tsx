@@ -74,9 +74,12 @@ export const StudentTimetable: React.FC = () => {
   const daySlots = filteredSlots.filter(t => t.day === selectedDay);
 
   // Time conversion helper for active class highlight
-  const timeToMin = (tStr: string) => {
-    const [h, m] = tStr.split(':').map(Number);
-    return h * 60 + m;
+  const timeToMin = (tStr?: string) => {
+    if (!tStr || typeof tStr !== 'string') return 0;
+    const parts = tStr.split(':').map(Number);
+    if (parts.length < 2) return 0;
+    const [h, m] = parts;
+    return (isNaN(h) ? 0 : h) * 60 + (isNaN(m) ? 0 : m);
   };
 
   const now = new Date();

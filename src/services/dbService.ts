@@ -64,6 +64,23 @@ const setStorageData = <T>(key: string, data: T): void => {
   }
 };
 
+// UUID Validation & Generation Helpers
+export const isValidUUID = (id?: string | null): boolean => {
+  if (!id || typeof id !== 'string') return false;
+  return /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/.test(id.trim());
+};
+
+export const generateUUID = (): string => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+};
+
 // Initialize default storage if empty
 export const initializeLocalStorage = () => {
   if (!localStorage.getItem('student_portal_profiles')) setStorageData('profiles', INITIAL_PROFILES);
@@ -109,7 +126,7 @@ export const dbService = {
 
   async getProfileById(id: string): Promise<UserProfile | null> {
     if (!id) return null;
-    if (isRealSupabaseConfigured()) {
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
       try {
         const { data, error } = await supabase.from('profiles').select('*').eq('id', id).maybeSingle();
         if (!error && data) return data as UserProfile;
@@ -522,11 +539,20 @@ export const dbService = {
   // TEACHER-SUBJECT ALLOCATION
   async getTeacherSubjects(teacherId?: string): Promise<TeacherSubject[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('teacher_subjects').select('*');
-      if (teacherId) query = query.eq('teacher_id', teacherId);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as TeacherSubject[];
+      try {
+        let query = supabase.from('teacher_subjects').select('*');
+        if (teacherId) {
+          if (!isValidUUID(teacherId)) {
+            const all = getStorageData<TeacherSubject[]>('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
+            return all.filter(ts => ts.teacher_id === teacherId);
+          }
+          query = query.eq('teacher_id', teacherId);
+        }
+        const { data, error } = await query;
+        if (!error && data) return data as TeacherSubject[];
+      } catch (e) {
+        console.warn('Supabase getTeacherSubjects error:', e);
+      }
     }
     const all = getStorageData<TeacherSubject[]>('teacher_subjects', INITIAL_TEACHER_SUBJECTS);
     return teacherId ? all.filter(ts => ts.teacher_id === teacherId) : all;
@@ -541,7 +567,7 @@ export const dbService = {
     if (existing) return existing;
 
     const newAllocation: TeacherSubject = {
-      id: `ts-${Date.now()}`,
+      id: isRealSupabaseConfigured() ? generateUUID() : `ts-${Date.now()}`,
       teacher_id: teacherId,
       subject_id: subjectId,
       subject_name: targetSubject?.name || 'Subject',
@@ -549,9 +575,13 @@ export const dbService = {
       created_at: new Date().toISOString(),
     };
 
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('teacher_subjects').insert({ teacher_id: teacherId, subject_id: subjectId });
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(teacherId) && isValidUUID(subjectId)) {
+      try {
+        const { error } = await supabase.from('teacher_subjects').insert({ teacher_id: teacherId, subject_id: subjectId });
+        if (error) console.warn('Supabase assignTeacherSubject error:', error.message);
+      } catch (e) {
+        console.warn('Supabase assignTeacherSubject exception:', e);
+      }
     }
 
     all.push(newAllocation);
@@ -564,9 +594,13 @@ export const dbService = {
     const filtered = all.filter(ts => !(ts.teacher_id === teacherId && ts.subject_id === subjectId));
     setStorageData('teacher_subjects', filtered);
 
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('teacher_subjects').delete().match({ teacher_id: teacherId, subject_id: subjectId });
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(teacherId) && isValidUUID(subjectId)) {
+      try {
+        const { error } = await supabase.from('teacher_subjects').delete().match({ teacher_id: teacherId, subject_id: subjectId });
+        if (error) console.warn('Supabase removeTeacherSubject error:', error.message);
+      } catch (e) {
+        console.warn('Supabase removeTeacherSubject exception:', e);
+      }
     }
     return true;
   },
@@ -574,11 +608,20 @@ export const dbService = {
   // STUDENT-SUBJECT ENROLLMENT
   async getStudentSubjects(studentId?: string): Promise<StudentSubject[]> {
     if (isRealSupabaseConfigured()) {
-      let query = supabase.from('student_subjects').select('*');
-      if (studentId) query = query.eq('student_id', studentId);
-      const { data, error } = await query;
-      if (error) throw new Error(error.message);
-      return data as StudentSubject[];
+      try {
+        let query = supabase.from('student_subjects').select('*');
+        if (studentId) {
+          if (!isValidUUID(studentId)) {
+            const all = getStorageData<StudentSubject[]>('student_subjects', INITIAL_STUDENT_SUBJECTS);
+            return all.filter(ss => ss.student_id === studentId);
+          }
+          query = query.eq('student_id', studentId);
+        }
+        const { data, error } = await query;
+        if (!error && data) return data as StudentSubject[];
+      } catch (e) {
+        console.warn('Supabase getStudentSubjects error:', e);
+      }
     }
     const all = getStorageData<StudentSubject[]>('student_subjects', INITIAL_STUDENT_SUBJECTS);
     return studentId ? all.filter(ss => ss.student_id === studentId) : all;
@@ -593,16 +636,20 @@ export const dbService = {
     if (existing) return existing;
 
     const newEnrollment: StudentSubject = {
-      id: `ss-${Date.now()}`,
+      id: isRealSupabaseConfigured() ? generateUUID() : `ss-${Date.now()}`,
       student_id: studentId,
       subject_id: subjectId,
       subject_name: targetSubject?.name,
       subject_code: targetSubject?.code,
     };
 
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('student_subjects').insert({ student_id: studentId, subject_id: subjectId });
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(studentId) && isValidUUID(subjectId)) {
+      try {
+        const { error } = await supabase.from('student_subjects').insert({ student_id: studentId, subject_id: subjectId });
+        if (error) console.warn('Supabase assignStudentSubject error:', error.message);
+      } catch (e) {
+        console.warn('Supabase assignStudentSubject exception:', e);
+      }
     }
 
     all.push(newEnrollment);
@@ -633,10 +680,13 @@ export const dbService = {
 
   // ATTENDANCE
   async getStudentAttendance(studentId: string): Promise<AttendanceRecord[]> {
-    if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('attendance').select('*').eq('student_id', studentId);
-      if (error) throw new Error(error.message);
-      return data as AttendanceRecord[];
+    if (isRealSupabaseConfigured() && isValidUUID(studentId)) {
+      try {
+        const { data, error } = await supabase.from('attendance').select('*').eq('student_id', studentId);
+        if (!error && data) return data as AttendanceRecord[];
+      } catch (e) {
+        console.warn('Supabase getStudentAttendance error:', e);
+      }
     }
     const all = getStorageData<AttendanceRecord[]>('attendance', INITIAL_ATTENDANCE);
     return all.filter(a => a.student_id === studentId);
@@ -1377,19 +1427,26 @@ export const dbService = {
 
   // NOTIFICATIONS
   async getNotifications(userId: string): Promise<NotificationItem[]> {
-    if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId);
-      if (error) throw new Error(error.message);
-      return data as NotificationItem[];
+    if (isRealSupabaseConfigured() && isValidUUID(userId)) {
+      try {
+        const { data, error } = await supabase.from('notifications').select('*').eq('user_id', userId);
+        if (!error && data) return data as NotificationItem[];
+      } catch (e) {
+        console.warn('Supabase getNotifications error:', e);
+      }
     }
     const all = getStorageData<NotificationItem[]>('notifications', INITIAL_NOTIFICATIONS);
     return all.filter(n => n.user_id === userId);
   },
 
   async markNotificationRead(id: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(id)) {
+      try {
+        const { error } = await supabase.from('notifications').update({ is_read: true }).eq('id', id);
+        if (error) console.warn('Supabase markNotificationRead error:', error.message);
+      } catch (e) {
+        console.warn('Supabase markNotificationRead error:', e);
+      }
     }
 
     const all = getStorageData<NotificationItem[]>('notifications', INITIAL_NOTIFICATIONS);
@@ -1403,9 +1460,13 @@ export const dbService = {
   },
 
   async markAllNotificationsRead(userId: string): Promise<boolean> {
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(userId)) {
+      try {
+        const { error } = await supabase.from('notifications').update({ is_read: true }).eq('user_id', userId);
+        if (error) console.warn('Supabase markAllNotificationsRead error:', error.message);
+      } catch (e) {
+        console.warn('Supabase markAllNotificationsRead error:', e);
+      }
     }
 
     const all = getStorageData<NotificationItem[]>('notifications', INITIAL_NOTIFICATIONS);

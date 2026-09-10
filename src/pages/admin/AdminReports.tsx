@@ -15,7 +15,7 @@ export const AdminReports: React.FC = () => {
     const fetchReportData = async () => {
       const [stdData, marksData, certData] = await Promise.all([
         dbService.getStudents(),
-        dbService.getStudentMarks('student-1'),
+        dbService.getAllMarks(),
         dbService.getCertificates(),
       ]);
       setStudents(stdData);
