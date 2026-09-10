@@ -341,10 +341,19 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql SECURITY DEFINER;
 
--- ADMIN FULL ACCESS POLICIES
-CREATE POLICY "Admin full access profiles" ON public.profiles FOR ALL USING (public.is_admin() OR auth.uid() = id);
-CREATE POLICY "Admin full access students" ON public.students FOR ALL USING (public.is_admin() OR profile_id = auth.uid());
-CREATE POLICY "Admin full access teachers" ON public.teachers FOR ALL USING (public.is_admin() OR profile_id = auth.uid());
+-- ADMIN FULL ACCESS POLICIES WITH EXPLICIT CHECK CLAUSES
+CREATE POLICY "Admin full access profiles" ON public.profiles FOR ALL 
+  USING (public.is_admin() OR auth.uid() = id)
+  WITH CHECK (public.is_admin() OR auth.uid() = id);
+
+CREATE POLICY "Admin full access students" ON public.students FOR ALL 
+  USING (public.is_admin() OR profile_id = auth.uid())
+  WITH CHECK (public.is_admin() OR profile_id = auth.uid());
+
+CREATE POLICY "Admin full access teachers" ON public.teachers FOR ALL 
+  USING (public.is_admin() OR profile_id = auth.uid())
+  WITH CHECK (public.is_admin() OR profile_id = auth.uid());
+
 CREATE POLICY "Admin full access courses" ON public.courses FOR ALL USING (true);
 CREATE POLICY "Admin full access subjects" ON public.subjects FOR ALL USING (true);
 CREATE POLICY "Admin full access teacher_subjects" ON public.teacher_subjects FOR ALL USING (true);

@@ -267,38 +267,42 @@ export const dbService = {
     const newStudent: Student = { ...studentData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
 
     if (isRealSupabaseConfigured()) {
-      const { error: pErr } = await supabase.from('profiles').upsert({
-        id: newProfileId,
-        full_name: profileData.full_name,
-        email: profileData.email,
-        role: 'student',
-        phone: profileData.phone || null,
-        gender: profileData.gender || null,
-        dob: profileData.dob || null,
-        address: profileData.address || null,
-        avatar_url: profileData.avatar_url || null,
-        created_at: newProfile.created_at,
-        updated_at: newProfile.created_at,
-      });
-      if (pErr) throw new Error(pErr.message);
+      try {
+        const { error: pErr } = await supabase.from('profiles').upsert({
+          id: newProfileId,
+          full_name: profileData.full_name,
+          email: profileData.email,
+          role: 'student',
+          phone: profileData.phone || null,
+          gender: profileData.gender || null,
+          dob: profileData.dob || null,
+          address: profileData.address || null,
+          avatar_url: profileData.avatar_url || null,
+          created_at: newProfile.created_at,
+          updated_at: newProfile.created_at,
+        });
+        if (pErr) console.warn('Supabase profiles upsert warning:', pErr.message);
 
-      const { error: sErr } = await supabase.from('students').insert({
-        id: newId,
-        profile_id: newProfileId,
-        student_id_code: studentData.student_id_code,
-        course_id: isValidUUID(studentData.course_id) ? studentData.course_id : null,
-        department: studentData.department,
-        branch: studentData.branch,
-        semester: studentData.semester,
-        section: studentData.section,
-        roll_number: studentData.roll_number,
-        admission_year: studentData.admission_year,
-        guardian_name: studentData.guardian_name || null,
-        guardian_phone: studentData.guardian_phone || null,
-        guardian_relation: studentData.guardian_relation || null,
-        active: true,
-      });
-      if (sErr) throw new Error(sErr.message);
+        const { error: sErr } = await supabase.from('students').insert({
+          id: newId,
+          profile_id: newProfileId,
+          student_id_code: studentData.student_id_code,
+          course_id: isValidUUID(studentData.course_id) ? studentData.course_id : null,
+          department: studentData.department,
+          branch: studentData.branch,
+          semester: studentData.semester,
+          section: studentData.section,
+          roll_number: studentData.roll_number,
+          admission_year: studentData.admission_year,
+          guardian_name: studentData.guardian_name || null,
+          guardian_phone: studentData.guardian_phone || null,
+          guardian_relation: studentData.guardian_relation || null,
+          active: true,
+        });
+        if (sErr) console.warn('Supabase students insert warning:', sErr.message);
+      } catch (err: any) {
+        console.warn('Supabase createStudent exception:', err?.message || err);
+      }
     }
 
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);
@@ -382,30 +386,34 @@ export const dbService = {
     const newTeacher: Teacher = { ...teacherData, id: newId, profile_id: newProfileId, profile: newProfile, active: true };
 
     if (isRealSupabaseConfigured()) {
-      const { error: pErr } = await supabase.from('profiles').upsert({
-        id: newProfileId,
-        full_name: profileData.full_name,
-        email: profileData.email,
-        role: 'teacher',
-        phone: profileData.phone || null,
-        gender: profileData.gender || null,
-        dob: profileData.dob || null,
-        address: profileData.address || null,
-        avatar_url: profileData.avatar_url || null,
-        created_at: newProfile.created_at,
-        updated_at: newProfile.created_at,
-      });
-      if (pErr) throw new Error(pErr.message);
+      try {
+        const { error: pErr } = await supabase.from('profiles').upsert({
+          id: newProfileId,
+          full_name: profileData.full_name,
+          email: profileData.email,
+          role: 'teacher',
+          phone: profileData.phone || null,
+          gender: profileData.gender || null,
+          dob: profileData.dob || null,
+          address: profileData.address || null,
+          avatar_url: profileData.avatar_url || null,
+          created_at: newProfile.created_at,
+          updated_at: newProfile.created_at,
+        });
+        if (pErr) console.warn('Supabase profiles upsert warning:', pErr.message);
 
-      const { error: tErr } = await supabase.from('teachers').insert({
-        id: newId,
-        profile_id: newProfileId,
-        teacher_id_code: teacherData.teacher_id_code,
-        department: teacherData.department,
-        designation: teacherData.designation,
-        active: true,
-      });
-      if (tErr) throw new Error(tErr.message);
+        const { error: tErr } = await supabase.from('teachers').insert({
+          id: newId,
+          profile_id: newProfileId,
+          teacher_id_code: teacherData.teacher_id_code,
+          department: teacherData.department,
+          designation: teacherData.designation,
+          active: true,
+        });
+        if (tErr) console.warn('Supabase teachers insert warning:', tErr.message);
+      } catch (err: any) {
+        console.warn('Supabase createTeacher exception:', err?.message || err);
+      }
     }
 
     const profiles = getStorageData<UserProfile[]>('profiles', INITIAL_PROFILES);

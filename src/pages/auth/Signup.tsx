@@ -21,8 +21,13 @@ export const Signup: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     if (!fullName || !email || !password || !confirmPassword) {
       showToast('Validation Error', 'All required fields must be completed.', 'error');
+      return;
+    }
+    if (!emailRegex.test(email.trim())) {
+      showToast('Validation Error', 'Please enter a valid email address.', 'error');
       return;
     }
     if (password !== confirmPassword) {

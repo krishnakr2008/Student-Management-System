@@ -45,8 +45,28 @@ export const AdminStudents: React.FC = () => {
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.full_name || !formData.email || !formData.roll_number) {
+    const cleanEmail = formData.email.trim();
+    const cleanName = formData.full_name.trim();
+    const cleanRoll = formData.roll_number.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!cleanName || !cleanEmail || !cleanRoll) {
       showToast('Validation Error', 'Please fill in all required fields.', 'error');
+      return;
+    }
+
+    if (!emailRegex.test(cleanEmail)) {
+      showToast('Validation Error', 'Please enter a valid email address.', 'error');
+      return;
+    }
+
+    if (students.some(s => s.profile?.email?.toLowerCase() === cleanEmail.toLowerCase())) {
+      showToast('Duplicate Email', `A student profile with email "${cleanEmail}" already exists.`, 'error');
+      return;
+    }
+
+    if (students.some(s => s.roll_number?.toLowerCase() === cleanRoll.toLowerCase())) {
+      showToast('Duplicate Roll Number', `Roll number "${cleanRoll}" is already registered.`, 'error');
       return;
     }
 
@@ -60,12 +80,12 @@ export const AdminStudents: React.FC = () => {
           branch: formData.branch,
           semester: formData.semester,
           section: formData.section,
-          roll_number: formData.roll_number,
+          roll_number: cleanRoll,
           admission_year: 2026,
         },
         {
-          full_name: formData.full_name,
-          email: formData.email,
+          full_name: cleanName,
+          email: cleanEmail,
           role: 'student',
         }
       );
@@ -81,7 +101,7 @@ export const AdminStudents: React.FC = () => {
         section: 'A',
         roll_number: '',
       });
-      showToast('Student Profile Created', `Successfully enrolled ${formData.full_name} in database.`, 'success');
+      showToast('Student Profile Created', `Successfully enrolled ${cleanName} in database.`, 'success');
     } catch (err: any) {
       showToast('Database Error', err.message || 'Failed to insert student record.', 'error');
     } finally {

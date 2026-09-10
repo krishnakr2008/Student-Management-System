@@ -42,8 +42,22 @@ export const AdminTeachers: React.FC = () => {
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!formData.full_name || !formData.email) {
+    const cleanEmail = formData.email.trim();
+    const cleanName = formData.full_name.trim();
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
+    if (!cleanName || !cleanEmail) {
       showToast('Validation Error', 'Please fill in name and email.', 'error');
+      return;
+    }
+
+    if (!emailRegex.test(cleanEmail)) {
+      showToast('Validation Error', 'Please enter a valid email address.', 'error');
+      return;
+    }
+
+    if (teachers.some(t => t.profile?.email?.toLowerCase() === cleanEmail.toLowerCase())) {
+      showToast('Duplicate Email', `A faculty profile with email "${cleanEmail}" already exists.`, 'error');
       return;
     }
 
@@ -57,8 +71,8 @@ export const AdminTeachers: React.FC = () => {
           designation: formData.designation,
         },
         {
-          full_name: formData.full_name,
-          email: formData.email,
+          full_name: cleanName,
+          email: cleanEmail,
           role: 'teacher',
         }
       );
@@ -71,7 +85,7 @@ export const AdminTeachers: React.FC = () => {
         department: 'Computer Science',
         designation: 'Assistant Professor',
       });
-      showToast('Faculty Member Added', `Successfully registered ${formData.full_name} in database.`, 'success');
+      showToast('Faculty Member Added', `Successfully registered ${cleanName} in database.`, 'success');
     } catch (err: any) {
       showToast('Database Error', err.message || 'Failed to add faculty member.', 'error');
     } finally {
