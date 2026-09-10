@@ -140,6 +140,72 @@ export const StudentAttendance: React.FC = () => {
         </div>
       </div>
 
+      {/* Weekly Period-Wise Attendance Schedule (Monday - Saturday, Periods 1 - 8) */}
+      <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+            <Clock className="w-5 h-5 text-emerald-500" />
+            <span>Weekly Class Attendance Schedule (Periods 1 – 8)</span>
+          </h3>
+          <span className="text-[11px] font-bold text-slate-500 bg-slate-100 dark:bg-slate-800 px-2.5 py-1 rounded-lg">
+            Mon – Sat • 8 Periods/Day
+          </span>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse min-w-[700px]">
+            <thead>
+              <tr className="bg-slate-50 dark:bg-slate-800/60 border-b border-slate-200 dark:border-slate-800 text-[10px] font-bold text-slate-500 dark:text-slate-400 uppercase">
+                <th className="p-3 border-r border-slate-200/60 dark:border-slate-800">Day</th>
+                <th className="p-2 text-center">P1 (09:00)</th>
+                <th className="p-2 text-center">P2 (10:00)</th>
+                <th className="p-2 text-center">P3 (11:00)</th>
+                <th className="p-2 text-center">P4 (12:00)</th>
+                <th className="p-2 text-center">P5 (01:30)</th>
+                <th className="p-2 text-center">P6 (02:30)</th>
+                <th className="p-2 text-center">P7 (03:30)</th>
+                <th className="p-2 text-center">P8 (04:30)</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100 dark:divide-slate-800 text-xs font-medium">
+              {[
+                { day: 'Monday', schedule: ['DBMS (P)', 'OOP (P)', 'Math (A)', 'Self Study', 'DBMS (P)', 'OOP (P)', 'Self Study', 'CN (P)'] },
+                { day: 'Tuesday', schedule: ['DSA (P)', 'OS (P)', 'DBMS (P)', 'Self Study', 'OOP (P)', 'CN (P)', 'Lab (P)', 'Self Study'] },
+                { day: 'Wednesday', schedule: ['Math (P)', 'DBMS (P)', 'DSA (P)', 'Self Study', 'OS (P)', 'OOP (P)', 'Self Study', 'Lab (P)'] },
+                { day: 'Thursday', schedule: ['OOP (P)', 'CN (P)', 'OS (P)', 'Self Study', 'Math (P)', 'DBMS (P)', 'Lab (P)', 'Self Study'] },
+                { day: 'Friday', schedule: ['DBMS (P)', 'DSA (P)', 'Math (P)', 'Self Study', 'CN (P)', 'OS (P)', 'Self Study', 'Lab (P)'] },
+                { day: 'Saturday', schedule: ['Lab (P)', 'Lab (P)', 'Self Study', 'Self Study', 'Seminar (P)', 'Seminar (P)', 'Free', 'Free'] },
+              ].map(row => (
+                <tr key={row.day} className="hover:bg-slate-50/50 dark:hover:bg-slate-800/40">
+                  <td className="p-3 font-bold text-slate-900 dark:text-slate-100 border-r border-slate-200/60 dark:border-slate-800">
+                    {row.day}
+                  </td>
+                  {row.schedule.map((slot, idx) => {
+                    const isPresent = slot.includes('(P)');
+                    const isAbsent = slot.includes('(A)');
+                    return (
+                      <td key={idx} className="p-2 text-center">
+                        <span
+                          className={`inline-block w-full py-1 px-1 rounded-md text-[10px] font-bold ${
+                            isPresent
+                              ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20'
+                              : isAbsent
+                              ? 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border border-rose-500/20'
+                              : 'bg-slate-100 dark:bg-slate-800 text-slate-500'
+                          }`}
+                        >
+                          {slot}
+                        </span>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
       {/* Attendance History Log */}
       <div className="bg-white dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 rounded-2xl p-6 shadow-xs space-y-4">
         <h3 className="text-base font-bold text-slate-900 dark:text-slate-100 flex items-center gap-2">

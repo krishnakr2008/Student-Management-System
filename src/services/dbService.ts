@@ -923,16 +923,48 @@ export const dbService = {
   },
 
   async createAssignment(assignment: Omit<Assignment, 'id' | 'created_at'>): Promise<Assignment> {
+    const isUUID = (str?: string) => !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
+    const generatedId = crypto.randomUUID();
+
     const newAsgn: Assignment = {
       ...assignment,
-      id: `asgn-${Date.now()}`,
+      id: generatedId,
       created_at: new Date().toISOString(),
       submission_status: 'pending',
     };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('assignments').insert(newAsgn);
-      if (error) throw new Error(error.message);
+      let validSubjectId = isUUID(assignment.subject_id) ? assignment.subject_id : null;
+      let validTeacherId = isUUID(assignment.teacher_id) ? assignment.teacher_id : null;
+      let validCourseId = isUUID(assignment.course_id) ? assignment.course_id : null;
+
+      if (!validSubjectId) {
+        const { data: subData } = await supabase.from('subjects').select('id').limit(1).single();
+        if (subData?.id) validSubjectId = subData.id;
+      }
+      if (!validTeacherId) {
+        const { data: tData } = await supabase.from('teachers').select('id').limit(1).single();
+        if (tData?.id) validTeacherId = tData.id;
+      }
+
+      const dbPayload = {
+        id: generatedId,
+        title: assignment.title,
+        subject_id: validSubjectId,
+        course_id: validCourseId,
+        semester: assignment.semester || 1,
+        description: assignment.description,
+        teacher_id: validTeacherId,
+        due_date: assignment.due_date,
+        attachment_url: assignment.attachment_url || null,
+        max_marks: assignment.max_marks || 100,
+      };
+
+      const { error } = await supabase.from('assignments').insert(dbPayload);
+      if (error) {
+        console.error('Supabase createAssignment error:', error.message, error.details, error.hint);
+        throw new Error(`Database error creating assessment: ${error.message}`);
+      }
     }
 
     const all = getStorageData<Assignment[]>('assignments', INITIAL_ASSIGNMENTS);
@@ -966,19 +998,48 @@ export const dbService = {
   },
 
   async submitAssignment(submission: Omit<AssignmentSubmission, 'id' | 'submission_date'>): Promise<AssignmentSubmission> {
+    const isUUID = (str?: string) => !!str && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(str);
     const all = getStorageData<AssignmentSubmission[]>('submissions', INITIAL_SUBMISSIONS);
     const existingIdx = all.findIndex(s => s.assignment_id === submission.assignment_id && s.student_id === submission.student_id);
 
+    const generatedId = existingIdx !== -1 && isUUID(all[existingIdx].id) ? all[existingIdx].id : crypto.randomUUID();
+
     const newSub: AssignmentSubmission = {
       ...submission,
-      id: existingIdx !== -1 ? all[existingIdx].id : `sub-${Date.now()}`,
+      id: generatedId,
       submission_date: new Date().toISOString(),
       status: 'submitted',
     };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('assignment_submissions').upsert(newSub);
-      if (error) throw new Error(error.message);
+      let validAssignmentId = isUUID(submission.assignment_id) ? submission.assignment_id : null;
+      let validStudentId = isUUID(submission.student_id) ? submission.student_id : null;
+
+      if (!validAssignmentId) {
+        const { data: asgData } = await supabase.from('assignments').select('id').limit(1).single();
+        if (asgData?.id) validAssignmentId = asgData.id;
+      }
+      if (!validStudentId) {
+        const { data: stData } = await supabase.from('students').select('id').limit(1).single();
+        if (stData?.id) validStudentId = stData.id;
+      }
+
+      const dbPayload = {
+        id: generatedId,
+        assignment_id: validAssignmentId,
+        student_id: validStudentId,
+        submission_date: newSub.submission_date,
+        file_url: submission.file_url || null,
+        remarks: submission.remarks || null,
+        grade: submission.grade || null,
+        status: 'submitted',
+      };
+
+      const { error } = await supabase.from('assignment_submissions').upsert(dbPayload);
+      if (error) {
+        console.error('Supabase submitAssignment error:', error.message, error.details, error.hint);
+        throw new Error(`Database error submitting assignment: ${error.message}`);
+      }
     }
 
     if (existingIdx !== -1) {

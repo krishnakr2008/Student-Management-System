@@ -21,6 +21,11 @@ export const TeacherAssignments: React.FC = () => {
   const [newAsgn, setNewAsgn] = useState({
     title: '',
     subject_id: '',
+    course_name: 'B.Tech CSE',
+    semester: 5,
+    section: 'A',
+    assessment_type: 'Assignment',
+    attachment_url: '',
     description: '',
     due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16),
     max_marks: 50,
@@ -63,13 +68,15 @@ export const TeacherAssignments: React.FC = () => {
 
     try {
       await dbService.createAssignment({
-        title: newAsgn.title,
+        title: `[${newAsgn.assessment_type}] ${newAsgn.title}`,
         subject_id: newAsgn.subject_id,
         subject_name: selectedSubj?.name || 'Subject',
-        description: newAsgn.description,
+        semester: Number(newAsgn.semester),
+        description: `[Course: ${newAsgn.course_name} | Sem ${newAsgn.semester} | Sec ${newAsgn.section}]\n${newAsgn.description}`,
         teacher_id: teacher.id,
         teacher_name: teacher.profile?.full_name || 'Faculty',
         due_date: newAsgn.due_date,
+        attachment_url: newAsgn.attachment_url || undefined,
         max_marks: newAsgn.max_marks,
       });
 
@@ -78,13 +85,18 @@ export const TeacherAssignments: React.FC = () => {
       setNewAsgn({
         title: '',
         subject_id: subjects[0]?.id || '',
+        course_name: 'B.Tech CSE',
+        semester: 5,
+        section: 'A',
+        assessment_type: 'Assignment',
+        attachment_url: '',
         description: '',
         due_date: new Date(Date.now() + 7 * 86400000).toISOString().slice(0, 16),
         max_marks: 50,
       });
-      showToast('Assignment Created', 'New assignment published to student portal.', 'success');
-    } catch (err) {
-      showToast('Error', 'Failed to create assignment.', 'error');
+      showToast('Assessment Published', 'New assessment task assigned successfully to student portal.', 'success');
+    } catch (err: any) {
+      showToast('Database Error', err?.message || 'Failed to create assessment.', 'error');
     }
   };
 
@@ -233,29 +245,59 @@ export const TeacherAssignments: React.FC = () => {
         <Modal
           isOpen={isCreateOpen}
           onClose={() => setIsCreateOpen(false)}
-          title="Create New Assignment"
-          subtitle="Publish homework task to student portal"
+          title="Create New Assessment & Assignment"
+          subtitle="Assign coursework, project, or assessment task to student portal"
         >
-          <form onSubmit={handleCreateAssignment} className="space-y-4">
-            <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Assignment Title</label>
-              <input
-                type="text"
-                required
-                value={newAsgn.title}
-                onChange={e => setNewAsgn({ ...newAsgn, title: e.target.value })}
-                placeholder="AVL Tree Implementation"
-                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
-              />
+          <form onSubmit={handleCreateAssignment} className="space-y-3">
+            <div className="grid grid-cols-3 gap-2">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Course</label>
+                <select
+                  value={newAsgn.course_name}
+                  onChange={e => setNewAsgn({ ...newAsgn, course_name: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
+                >
+                  <option value="B.Tech CSE">B.Tech CSE</option>
+                  <option value="B.Tech IT">B.Tech IT</option>
+                  <option value="B.Tech ECE">B.Tech ECE</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Semester</label>
+                <select
+                  value={newAsgn.semester}
+                  onChange={e => setNewAsgn({ ...newAsgn, semester: Number(e.target.value) })}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
+                >
+                  {[1, 2, 3, 4, 5, 6, 7, 8].map(s => (
+                    <option key={s} value={s}>Semester {s}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Section</label>
+                <select
+                  value={newAsgn.section}
+                  onChange={e => setNewAsgn({ ...newAsgn, section: e.target.value })}
+                  className="w-full px-2.5 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
+                >
+                  <option value="A">Section A</option>
+                  <option value="B">Section B</option>
+                  <option value="C">Section C</option>
+                  <option value="All">All Sections</option>
+                </select>
+              </div>
             </div>
 
             <div className="grid grid-cols-2 gap-3">
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Subject (Assigned Only)</label>
+                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Subject (Assigned Only)</label>
                 <select
                   value={newAsgn.subject_id}
                   onChange={e => setNewAsgn({ ...newAsgn, subject_id: e.target.value })}
-                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
                 >
                   {subjects.map(s => (
                     <option key={s.id} value={s.id}>
@@ -266,36 +308,75 @@ export const TeacherAssignments: React.FC = () => {
               </div>
 
               <div className="space-y-1">
-                <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Max Marks</label>
+                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Assessment Type</label>
+                <select
+                  value={newAsgn.assessment_type}
+                  onChange={e => setNewAsgn({ ...newAsgn, assessment_type: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
+                >
+                  <option value="Assignment">Homework Assignment</option>
+                  <option value="Assessment">Mid-Term Assessment</option>
+                  <option value="Quiz">Quick Quiz</option>
+                  <option value="Practical">Lab Practical</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Assessment Title</label>
+              <input
+                type="text"
+                required
+                value={newAsgn.title}
+                onChange={e => setNewAsgn({ ...newAsgn, title: e.target.value })}
+                placeholder="AVL Tree Implementation & Complexity Analysis"
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
+              />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Max Marks</label>
                 <input
                   type="number"
                   value={newAsgn.max_marks}
                   onChange={e => setNewAsgn({ ...newAsgn, max_marks: Number(e.target.value) })}
-                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Due Date & Time</label>
+                <input
+                  type="datetime-local"
+                  required
+                  value={newAsgn.due_date}
+                  onChange={e => setNewAsgn({ ...newAsgn, due_date: e.target.value })}
+                  className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
                 />
               </div>
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Due Date & Time</label>
+              <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Attachment / File Document Link (Optional)</label>
               <input
-                type="datetime-local"
-                required
-                value={newAsgn.due_date}
-                onChange={e => setNewAsgn({ ...newAsgn, due_date: e.target.value })}
-                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs"
+                type="url"
+                value={newAsgn.attachment_url}
+                onChange={e => setNewAsgn({ ...newAsgn, attachment_url: e.target.value })}
+                placeholder="https://drive.google.com/file/d/..."
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium"
               />
             </div>
 
             <div className="space-y-1">
-              <label className="text-xs font-semibold text-slate-700 dark:text-slate-300">Description & Instructions</label>
+              <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300">Description & Submission Instructions</label>
               <textarea
                 rows={3}
                 required
                 value={newAsgn.description}
                 onChange={e => setNewAsgn({ ...newAsgn, description: e.target.value })}
-                placeholder="Detailed instructions for students..."
-                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs resize-none"
+                placeholder="Detailed instructions for student class..."
+                className="w-full px-3 py-1.5 bg-slate-50 dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-xs font-medium resize-none"
               />
             </div>
 
@@ -311,7 +392,7 @@ export const TeacherAssignments: React.FC = () => {
                 type="submit"
                 className="px-5 py-2 text-xs font-bold text-white bg-emerald-600 hover:bg-emerald-500 rounded-xl shadow-xs"
               >
-                Publish Assignment
+                Assign Assessment
               </button>
             </div>
           </form>
