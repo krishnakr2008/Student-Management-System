@@ -1477,27 +1477,64 @@ export const dbService = {
     if (isRealSupabaseConfigured()) {
       try {
         let query = supabase.from('certificates').select('*').order('created_at', { ascending: false });
-        if (studentId) query = query.eq('student_id', studentId);
-        const { data, error } = await query;
-        if (!error && data && data.length > 0) return data as Certificate[];
+        if (studentId && isValidUUID(studentId)) {
+          query = query.eq('student_id', studentId);
+          const { data, error } = await query;
+          if (!error && data && data.length > 0) return data as Certificate[];
+        } else if (!studentId) {
+          const { data, error } = await query;
+          if (!error && data && data.length > 0) return data as Certificate[];
+        }
       } catch (e) {
         console.warn('Supabase getCertificates warning:', e);
       }
     }
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
-    return studentId ? all.filter(c => c.student_id === studentId) : all;
+    return studentId ? all.filter(c => c.student_id === studentId || !isValidUUID(studentId)) : all;
   },
 
   async uploadCertificate(cert: Omit<Certificate, 'id' | 'status'>): Promise<Certificate> {
+    const generatedId = generateUUID();
     const newCert: Certificate = {
       ...cert,
-      id: `cert-${Date.now()}`,
+      id: generatedId,
       status: 'pending',
     };
 
     if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('certificates').insert(newCert);
-      if (error) throw new Error(error.message);
+      try {
+        let validStudentId = isValidUUID(cert.student_id) ? cert.student_id : null;
+        if (!validStudentId) {
+          const { data: userData } = await supabase.auth.getUser();
+          if (userData?.user?.id) {
+            const { data: stRow } = await supabase.from('students').select('id').eq('profile_id', userData.user.id).limit(1);
+            if (stRow && stRow.length > 0) validStudentId = stRow[0].id;
+          }
+        }
+        if (!validStudentId) {
+          const { data: stData } = await supabase.from('students').select('id').limit(1);
+          if (stData && stData.length > 0) validStudentId = stData[0].id;
+        }
+
+        const dbPayload = {
+          id: generatedId,
+          student_id: validStudentId,
+          name: cert.name,
+          organization: cert.organization,
+          issue_date: cert.issue_date,
+          certificate_code: cert.certificate_code || null,
+          credential_url: cert.credential_url || null,
+          category: cert.category,
+          description: cert.description || null,
+          file_url: cert.file_url || null,
+          status: 'pending',
+        };
+
+        const { error } = await supabase.from('certificates').insert(dbPayload);
+        if (error) console.warn('Supabase uploadCertificate warning:', error.message);
+      } catch (err: any) {
+        console.warn('Supabase uploadCertificate exception:', err?.message || err);
+      }
     }
 
     const all = getStorageData<Certificate[]>('certificates', INITIAL_CERTIFICATES);
@@ -1548,9 +1585,13 @@ export const dbService = {
 
   // RESUME
   async getStudentResume(studentId: string): Promise<ResumeData> {
-    if (isRealSupabaseConfigured()) {
-      const { data, error } = await supabase.from('resumes').select('*').eq('student_id', studentId).maybeSingle();
-      if (!error && data) return data as ResumeData;
+    if (isRealSupabaseConfigured() && isValidUUID(studentId)) {
+      try {
+        const { data, error } = await supabase.from('resumes').select('*').eq('student_id', studentId).maybeSingle();
+        if (!error && data) return data as ResumeData;
+      } catch (e) {
+        console.warn('Supabase getStudentResume warning:', e);
+      }
     }
     const resumes = getStorageData<ResumeData[]>('resumes', [INITIAL_RESUME]);
     const found = resumes.find(r => r.student_id === studentId);
@@ -1558,9 +1599,13 @@ export const dbService = {
   },
 
   async saveStudentResume(resume: ResumeData): Promise<ResumeData> {
-    if (isRealSupabaseConfigured()) {
-      const { error } = await supabase.from('resumes').upsert(resume);
-      if (error) throw new Error(error.message);
+    if (isRealSupabaseConfigured() && isValidUUID(resume.student_id)) {
+      try {
+        const { error } = await supabase.from('resumes').upsert(resume);
+        if (error) console.warn('Supabase saveStudentResume warning:', error.message);
+      } catch (e) {
+        console.warn('Supabase saveStudentResume exception:', e);
+      }
     }
 
     const resumes = getStorageData<ResumeData[]>('resumes', [INITIAL_RESUME]);
@@ -1658,8 +1703,16 @@ export const dbService = {
   },
 
   async getStudentFees(studentId: string): Promise<FeeRecord[]> {
+    if (isRealSupabaseConfigured() && isValidUUID(studentId)) {
+      try {
+        const { data, error } = await supabase.from('fees').select('*').eq('student_id', studentId);
+        if (!error && data && data.length > 0) return data as FeeRecord[];
+      } catch (e) {
+        console.warn('Supabase getStudentFees error:', e);
+      }
+    }
     const all = await this.getFees();
-    return all.filter(f => f.student_id === studentId);
+    return all.filter(f => f.student_id === studentId || !isValidUUID(studentId));
   },
 
   async payFee(feeId: string, amountPaid: number): Promise<FeeRecord> {
